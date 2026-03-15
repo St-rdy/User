@@ -34,9 +34,36 @@ dependencies {
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     runtimeOnly 'org.postgresql:postgresql'
     annotationProcessor 'org.projectlombok:lombok'
+
+    //테스트용 의존성
+    testImplementation platform("org.testcontainers:testcontainers-bom:2.0.3")
+
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.security:spring-security-test'
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation 'com.h2database:h2'
+    testImplementation "org.testcontainers:testcontainers"
+    testImplementation "org.testcontainers:junit-jupiter"
+    testImplementation "org.testcontainers:postgresql"
+
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+configurations.configureEach {
+    resolutionStrategy.eachDependency { DependencyResolveDetails details ->
+        // CVE-2025-48924: commons-lang3 3.17.0 취약점
+        if (details.requested.group == 'org.apache.commons'
+                && details.requested.name == 'commons-lang3') {
+            details.useVersion '3.18.0'
+            details.because 'CVE-2025-48924 fix'
+        }
+        // CVE-2024-25710, CVE-2024-26308: commons-compress 1.24.0 취약점
+        if (details.requested.group == 'org.apache.commons'
+                && details.requested.name == 'commons-compress') {
+            details.useVersion '1.27.1'
+            details.because 'CVE-2024-25710, CVE-2024-26308 fix'
+        }
+    }
 }
 
 tasks.named('test') {
