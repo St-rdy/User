@@ -1,0 +1,42 @@
+Configuration:
+  status: warn  # 개발중에도 warn이 편함
+  name: DefaultConfig
+
+  Properties:
+    Property:
+      - name: LOG_PATTERN
+        value: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"
+
+  Appenders:
+    Console:
+      name: Console
+      target: SYSTEM_OUT
+      PatternLayout:
+        pattern: ${LOG_PATTERN}
+        disableAnsi: false
+
+  Loggers:
+    Root:
+      level: info
+      AppenderRef:
+        - ref: Console
+
+    Logger:
+      - name: com.stardy
+        level: debug
+        additivity: false
+        AppenderRef:
+          - ref: Console
+
+      - name: org.springframework
+        level: warn
+        additivity: false
+        AppenderRef:
+          - ref: Console
+
+      # JPA/Hibernate SQL 쿼리 보고 싶을 때 주석 해제
+      # - name: org.hibernate.SQL
+      #   level: debug
+      #   additivity: false
+      #   AppenderRef:
+      #     - ref: Console

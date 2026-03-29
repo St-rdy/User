@@ -18,6 +18,8 @@ configurations {
     compileOnly {
         extendsFrom annotationProcessor
     }
+    // log4j2 사용을 위해 기본으로 사용되는 logging 의존성 제거
+    all*.exclude group: 'org.springframework.boot', module: 'spring-boot-starter-logging'
 }
 
 repositories {
@@ -30,13 +32,48 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
     implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
     compileOnly 'org.projectlombok:lombok'
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     runtimeOnly 'org.postgresql:postgresql'
     annotationProcessor 'org.projectlombok:lombok'
+
+    // ✅ log4j2 관련
+    implementation 'org.springframework.boot:spring-boot-starter-log4j2'
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+    implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml'
+
+    //테스트용 의존성
+    testImplementation platform("org.testcontainers:testcontainers-bom:2.0.3")
+
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.security:spring-security-test'
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation 'com.h2database:h2'
+    testImplementation "org.testcontainers:testcontainers"
+    testImplementation "org.testcontainers:junit-jupiter"
+    testImplementation "org.testcontainers:postgresql"
+
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+configurations.configureEach {
+    resolutionStrategy.eachDependency { DependencyResolveDetails details ->
+        // CVE-2025-48924: commons-lang3 3.17.0 취약점
+        if (details.requested.group == 'org.apache.commons'
+                && details.requested.name == 'commons-lang3') {
+            details.useVersion '3.18.0'
+            details.because 'CVE-2025-48924 fix'
+        }
+        // CVE-2024-25710, CVE-2024-26308: commons-compress 1.24.0 취약점
+        if (details.requested.group == 'org.apache.commons'
+                && details.requested.name == 'commons-compress') {
+            details.useVersion '1.27.1'
+            details.because 'CVE-2024-25710, CVE-2024-26308 fix'
+        }
+    }
 }
 
 tasks.named('test') {
