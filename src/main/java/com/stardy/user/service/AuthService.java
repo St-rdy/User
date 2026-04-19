@@ -22,14 +22,14 @@ public class AuthService {
 
     public TokenResponse reissueToken(String refreshToken){
         if(!jwtProvider.isTokenValid(refreshToken)){
-            throw new InvalidTokenException("유효하지 않은 토큰입니다");
+            throw new InvalidTokenException();
         }
 
         String email = jwtProvider.extractEmail(refreshToken);
         String storedToken = redisTokenRepository.getRefreshToken(email);
 
         if(!refreshToken.equals(storedToken)){
-            throw new InvalidTokenException("유효하지 않은 토큰입니다");
+            throw new InvalidTokenException();
         }
 
         String newAccessToken = jwtProvider.createAccessToken(email, userRepository.getRole(email));

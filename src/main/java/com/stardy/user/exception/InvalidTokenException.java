@@ -1,7 +1,7 @@
 package com.stardy.user.exception;
 
-public class InvalidTokenException extends  RuntimeException {
-    public InvalidTokenException(String message) {
-        super(message);
+public class InvalidTokenException extends BaseException {
+    public InvalidTokenException() {
+        super(ErrorCode.INVALID_TOKEN);
     }
 }
