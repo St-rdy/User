@@ -1,7 +1,9 @@
 package com.stardy.user.exception;
 
+import lombok.Getter;
 import org.springframework.http.HttpStatus;
 
+@Getter
 public enum ErrorCode {
     INVALID_TEMP_CODE(HttpStatus.BAD_REQUEST, "INVALID_TEMP_CODE", "임시 코드가 유효하지 않습니다."),
     MISSING_PARAMETER(HttpStatus.BAD_REQUEST, "MISSING_PARAMETER", "필수 파라미터가 누락되었습니다."),
@@ -9,6 +11,7 @@ public enum ErrorCode {
     INVALID_NICKNAME(HttpStatus.BAD_REQUEST, "INVALID_NICKNAME", "유효하지 않은 닉네임 형식입니다."),
     INVALID_PROFILE_IMAGE(HttpStatus.BAD_REQUEST, "INVALID_PROFILE_IMAGE", "허용되지 않은 프로필 이미지 URL입니다."),
     LAST_PROVIDER(HttpStatus.BAD_REQUEST, "LAST_PROVIDER", "최소 1개의 소셜 연동이 필요합니다."),
+    INVALID_DOMAIN(HttpStatus.BAD_REQUEST, "INVALID_DOMAIN", "유효하지 않은 도메인 형식입니다."),
     UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "인증 정보가 유효하지 않습니다."),
     TOKEN_EXPIRED(HttpStatus.UNAUTHORIZED, "TOKEN_EXPIRED", "토큰이 만료되었습니다."),
     REFRESH_TOKEN_NOT_FOUND(HttpStatus.UNAUTHORIZED, "REFRESH_TOKEN_NOT_FOUND", "Refresh Token이 존재하지 않습니다."),
@@ -29,15 +32,4 @@ public enum ErrorCode {
         this.message = message;
     }
 
-    public HttpStatus getStatus() {
-        return status;
-    }
-
-    public String getCode() {
-        return code;
-    }
-
-    public String getMessage() {
-        return message;
-    }
 }

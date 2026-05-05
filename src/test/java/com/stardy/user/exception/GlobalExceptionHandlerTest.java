@@ -15,7 +15,7 @@ class GlobalExceptionHandlerTest {
     @Test
     @DisplayName("BaseException은 ErrorCode에 맞는 상태코드와 응답 본문으로 변환한다.")
     void handleBaseException() {
-        ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleBaseException(new InvalidTokenException());
+        ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleBaseException(new BaseException(ErrorCode.INVALID_TOKEN));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
         assertThat(response.getBody()).isNotNull();
