@@ -53,6 +53,17 @@ class JwtProviderTest {
     }
 
     @Test
+    @DisplayName("같은 이메일로 연속 생성한 RefreshToken은 서로 달라야 한다.")
+    void refreshTokenShouldBeUnique() {
+        String email = "test@gmail.com";
+
+        String firstToken = jwtProvider.createRefreshToken(email);
+        String secondToken = jwtProvider.createRefreshToken(email);
+
+        assertThat(firstToken).isNotEqualTo(secondToken);
+    }
+
+    @Test
     @DisplayName("AccessToken에서 이메일을 추출할 수 있다.")
     void extractEmailFromToken() {
         // given
