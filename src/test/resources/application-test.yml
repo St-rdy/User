@@ -11,3 +11,4 @@ jwt:
   secret: 5f7e12f7-a7fa-4cf3-8831-7656034e90d3
   access-token-expiration: 1800000
   refresh-token-expiration: 604800000
+  temporary-code-expiration: 30000
