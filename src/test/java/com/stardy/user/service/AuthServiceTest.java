@@ -194,6 +194,7 @@ class AuthServiceTest {
 
         // Redis에서 임시 코드를 조회하면 TokenResponse를 반환하도록 설정
         given(redisTokenRepository.getTemporaryCode(tempCode)).willReturn(expectedTokens);
+        given(jwtProvider.extractEmail("access-token")).willReturn("test@gmail.com");
 
         // when
         TokenResponseDto result = authService.exchangeTemporaryCode(tempCode);
@@ -201,6 +202,7 @@ class AuthServiceTest {
         // then
         assertThat(result.getAccessToken()).isEqualTo("access-token");
         assertThat(result.getRefreshToken()).isEqualTo("refresh-token");
+        then(redisTokenRepository).should().saveRefreshToken("test@gmail.com", "refresh-token");
         // 일회성 코드이므로 사용 즉시 삭제됐는지 검증
         then(redisTokenRepository).should().deleteTemporaryCode(tempCode);
     }

@@ -89,6 +89,9 @@ public class AuthService {
             throw new BaseException(INVALID_TEMP_CODE);
         }
 
+        String email = jwtProvider.extractEmail(tokens.getAccessToken());
+        redisTokenRepository.saveRefreshToken(email, tokens.getRefreshToken());
+
         // 사용 즉시 삭제 — 일회성 보장
         redisTokenRepository.deleteTemporaryCode(tempCode);
 
