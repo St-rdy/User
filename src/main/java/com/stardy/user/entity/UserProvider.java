@@ -46,4 +46,12 @@ public class UserProvider {
 
     @Column(name = "connected_at")
     private LocalDateTime connectedAt;
+
+    public UserProvider(User user, String provider, String socialId, String providerEmail) {
+        this.user = user;
+        this.provider = provider;
+        this.socialId = socialId;
+        this.providerEmail = providerEmail;
+        this.connectedAt = LocalDateTime.now();
+    }
 }

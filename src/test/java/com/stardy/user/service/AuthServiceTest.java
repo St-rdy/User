@@ -1,5 +1,6 @@
 package com.stardy.user.service;
 
+import com.stardy.user.dto.OAuthSignupInfoDto;
 import com.stardy.user.dto.TokenResponseDto;
 import com.stardy.user.entity.Role;
 import com.stardy.user.entity.User;
@@ -50,6 +51,9 @@ class AuthServiceTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private GoogleOAuth2Service googleOAuth2Service;
+
     @Test
     @DisplayName("유효한 RefreshToken으로 AccessToken과 RefreshToken을 재발급한다.")
     void reissueTokens() {
@@ -63,11 +67,11 @@ class AuthServiceTest {
         given(jwtProvider.isTokenValid(oldRefreshToken)).willReturn(true);
         given(jwtProvider.extractEmail(oldRefreshToken)).willReturn(email);
 
-        given(redisTokenRepository.getRefreshToken(email)).willReturn(oldRefreshToken);
         given(userRepository.findByEmail(email)).willReturn(Optional.of(createUserWithRole(email, role)));
 
         given(jwtProvider.createAccessToken(eq(email), eq(role))).willReturn(newAccessToken);
         given(jwtProvider.createRefreshToken(email)).willReturn(newRefreshToken);
+        given(redisTokenRepository.rotateRefreshToken(email, oldRefreshToken, newRefreshToken)).willReturn(true);
 
         // when
         TokenResponseDto result = authService.reissueToken(oldRefreshToken);
@@ -75,8 +79,7 @@ class AuthServiceTest {
         // then
         assertThat(result.getAccessToken()).isEqualTo(newAccessToken);
         assertThat(result.getRefreshToken()).isEqualTo(newRefreshToken);
-        then(redisTokenRepository).should().deleteRefreshToken(email);
-        then(redisTokenRepository).should().saveRefreshToken(email, newRefreshToken);
+        then(redisTokenRepository).should().rotateRefreshToken(email, oldRefreshToken, newRefreshToken);
     }
 
     @Test
@@ -99,11 +102,15 @@ class AuthServiceTest {
         // given
         String stolenToken = "stolen-token";
         String email = "test@gmail.com";
-        String storedToken = "real-refresh-token";
+        String newAccessToken = "new-access-token";
+        String newRefreshToken = "new-refresh-token";
 
         given(jwtProvider.isTokenValid(stolenToken)).willReturn(true);
         given(jwtProvider.extractEmail(stolenToken)).willReturn(email);
-        given(redisTokenRepository.getRefreshToken(email)).willReturn(storedToken);
+        given(userRepository.findByEmail(email)).willReturn(Optional.of(createUserWithRole(email, "ROLE_USER")));
+        given(jwtProvider.createAccessToken(email, "ROLE_USER")).willReturn(newAccessToken);
+        given(jwtProvider.createRefreshToken(email)).willReturn(newRefreshToken);
+        given(redisTokenRepository.rotateRefreshToken(email, stolenToken, newRefreshToken)).willReturn(false);
 
         // when
         BaseException exception = assertThrows(BaseException.class, () -> authService.reissueToken(stolenToken));
@@ -121,7 +128,10 @@ class AuthServiceTest {
 
         given(jwtProvider.isTokenValid(refreshToken)).willReturn(true);
         given(jwtProvider.extractEmail(refreshToken)).willReturn(email);
-        given(redisTokenRepository.getRefreshToken(email)).willReturn(null); // Redis에 없는 경우
+        given(userRepository.findByEmail(email)).willReturn(Optional.of(createUserWithRole(email, "ROLE_USER")));
+        given(jwtProvider.createAccessToken(email, "ROLE_USER")).willReturn("new-access-token");
+        given(jwtProvider.createRefreshToken(email)).willReturn("new-refresh-token");
+        given(redisTokenRepository.rotateRefreshToken(email, refreshToken, "new-refresh-token")).willReturn(false);
 
         // when
         BaseException exception = assertThrows(BaseException.class, () -> authService.reissueToken(refreshToken));
@@ -131,19 +141,27 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("회원 정보가 없으면 예외를 던진다.")
-    void reissueWithNoUser() {
+    @DisplayName("가입 대기 사용자도 Refresh Token을 재발급한다.")
+    void reissueWithPendingSignupUser() {
         String refreshToken = "refresh-token";
         String email = "test@gmail.com";
+        OAuthSignupInfoDto signupInfo = new OAuthSignupInfoDto(
+                email, "Test User", "ROLE_USER", "GOOGLE", "google-sub", email
+        );
 
         given(jwtProvider.isTokenValid(refreshToken)).willReturn(true);
         given(jwtProvider.extractEmail(refreshToken)).willReturn(email);
-        given(redisTokenRepository.getRefreshToken(email)).willReturn(refreshToken);
         given(userRepository.findByEmail(email)).willReturn(Optional.empty());
+        given(redisTokenRepository.getOAuthSignupInfo(email)).willReturn(signupInfo);
+        given(jwtProvider.createAccessToken(email, "ROLE_USER")).willReturn("new-access-token");
+        given(jwtProvider.createRefreshToken(email)).willReturn("new-refresh-token");
+        given(redisTokenRepository.rotateRefreshToken(email, refreshToken, "new-refresh-token")).willReturn(true);
 
-        BaseException exception = assertThrows(BaseException.class, () -> authService.reissueToken(refreshToken));
+        TokenResponseDto result = authService.reissueToken(refreshToken);
 
-        assertBaseException(exception, ErrorCode.INVALID_TOKEN);
+        assertThat(result.getAccessToken()).isEqualTo("new-access-token");
+        assertThat(result.getRefreshToken()).isEqualTo("new-refresh-token");
+        then(redisTokenRepository).should().rotateRefreshToken(email, refreshToken, "new-refresh-token");
     }
 
     @Test
@@ -194,6 +212,7 @@ class AuthServiceTest {
 
         // Redis에서 임시 코드를 조회하면 TokenResponse를 반환하도록 설정
         given(redisTokenRepository.getTemporaryCode(tempCode)).willReturn(expectedTokens);
+        given(jwtProvider.extractEmail("access-token")).willReturn("test@gmail.com");
 
         // when
         TokenResponseDto result = authService.exchangeTemporaryCode(tempCode);
@@ -201,6 +220,7 @@ class AuthServiceTest {
         // then
         assertThat(result.getAccessToken()).isEqualTo("access-token");
         assertThat(result.getRefreshToken()).isEqualTo("refresh-token");
+        then(redisTokenRepository).should().saveRefreshToken("test@gmail.com", "refresh-token");
         // 일회성 코드이므로 사용 즉시 삭제됐는지 검증
         then(redisTokenRepository).should().deleteTemporaryCode(tempCode);
     }

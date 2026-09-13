@@ -51,7 +51,7 @@ public class User {
     private Map<String, Object> domain;
 
     @Column(nullable = false, length = 20)
-    private String status; // "ACTIVE", "BANNED", "WITHDRAWAL"
+    private String status; // "ACTIVE", "BANNED", "INACTIVE"
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
@@ -77,6 +77,30 @@ public class User {
         this.profileImageUrl = profileImageUrl;
         this.domain = domain;
         this.role = role;
+        this.status = status;
+    }
+
+    public void changeNickname(String nickname) {
+        this.nickname = nickname;
+    }
+
+    public void changeDomain(Map<String, Object> domain) {
+        this.domain = domain;
+    }
+
+    public void changeProfileImage(String profileImageUrl) {
+        this.profileImageUrl = profileImageUrl;
+    }
+
+    public void deleteUser() {
+        this.status = "INACTIVE";
+    }
+
+    public void bannedUser() {
+        this.status = "BANNED";
+    }
+
+    public void changeStatus(String status) {
         this.status = status;
     }
 }

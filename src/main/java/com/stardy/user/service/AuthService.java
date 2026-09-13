@@ -1,5 +1,6 @@
 package com.stardy.user.service;
 
+import com.stardy.user.dto.OAuthSignupInfoDto;
 import com.stardy.user.dto.TokenResponseDto;
 import com.stardy.user.entity.User;
 import com.stardy.user.exception.BaseException;
@@ -9,6 +10,7 @@ import com.stardy.user.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Map;
 import java.util.UUID;
 
 import static com.stardy.user.exception.ErrorCode.*;
@@ -19,11 +21,14 @@ public class AuthService {
     private final JwtProvider jwtProvider;
     private final RedisTokenRepository redisTokenRepository;
     private final UserRepository userRepository;
+    private final GoogleOAuth2Service googleOAuth2Service;
 
-    public AuthService(JwtProvider jwtProvider, RedisTokenRepository redisTokenRepository, UserRepository userRepository) {
+    public AuthService(JwtProvider jwtProvider, RedisTokenRepository redisTokenRepository, UserRepository userRepository,
+                       GoogleOAuth2Service googleOAuth2Service) {
         this.jwtProvider = jwtProvider;
         this.redisTokenRepository = redisTokenRepository;
         this.userRepository = userRepository;
+        this.googleOAuth2Service = googleOAuth2Service;
     }
 
     @Transactional(readOnly = true)
@@ -33,26 +38,17 @@ public class AuthService {
         }
 
         String email = jwtProvider.extractEmail(refreshToken);
-        String storedToken = redisTokenRepository.getRefreshToken(email);
-
-        if(!refreshToken.equals(storedToken)){
-            throw new BaseException(INVALID_TOKEN);
-        }
-
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new BaseException(INVALID_TOKEN));
-
-        if (user.getRole() == null) {
-            throw new BaseException(INVALID_TOKEN);
-        }
-
-        String role = user.getRole().getRoleId();
+        String role = userRepository.findByEmail(email)
+                .map(User::getRole)
+                .map(userRole -> userRole.getRoleId())
+                .orElseGet(() -> getPendingSignupRole(email));
 
         String newAccessToken = jwtProvider.createAccessToken(email, role);
         String newRefreshToken = jwtProvider.createRefreshToken(email);
 
-        redisTokenRepository.deleteRefreshToken(email);
-        redisTokenRepository.saveRefreshToken(email, newRefreshToken);
+        if (!redisTokenRepository.rotateRefreshToken(email, refreshToken, newRefreshToken)) {
+            throw new BaseException(INVALID_TOKEN);
+        }
 
         return new TokenResponseDto(newAccessToken, newRefreshToken);
     }
@@ -60,12 +56,12 @@ public class AuthService {
     /**
      * OAuth2 로그인 성공 후 JWT를 바로 주지 않고 임시 코드(UUID)로 교환해서 반환.
      * 프론트가 URL에서 이 코드를 꺼내 재요청하면 exchangeTemporaryCode()에서 JWT를 발급.
-     *
-     * 이렇게 한 번 더 꼬는 이유는 보안 때문이야.
-     * 콜백 URL에 JWT를 직접 담으면 브라우저 히스토리나 서버 로그에 토큰이 남을 수 있어.
-     * UUID는 그 자체로 아무 정보도 없고, 30초 안에 사용하지 않으면 만료돼.
      */
     public String issueTemporaryCode(String email, String role) {
+        return issueTemporaryCode(email, role, null);
+    }
+
+    public String issueTemporaryCode(String email, String role, OAuthSignupInfoDto signupInfo) {
         // JWT를 먼저 만들어서
         String accessToken = jwtProvider.createAccessToken(email, role);
         String refreshToken = jwtProvider.createRefreshToken(email);
@@ -73,9 +69,22 @@ public class AuthService {
         // UUID를 키로 Redis에 잠깐 저장 — TTL은 RedisTokenRepositoryImpl에서 관리
         String tempCode = UUID.randomUUID().toString();
         redisTokenRepository.saveTemporaryCode(tempCode, new TokenResponseDto(accessToken, refreshToken));
+        if (signupInfo != null) {
+            redisTokenRepository.saveOAuthSignupInfo(email, signupInfo);
+        }
 
         // 프론트에게는 UUID만 전달
         return tempCode;
+    }
+
+    public void completeSignup(String email, String nickname, String profileImageUrl, Map<String, Object> domain) {
+        OAuthSignupInfoDto signupInfo = redisTokenRepository.getOAuthSignupInfo(email);
+        if (signupInfo == null) {
+            throw new BaseException(INVALID_TEMP_CODE);
+        }
+
+        googleOAuth2Service.completeSignup(signupInfo, nickname, profileImageUrl, domain);
+        redisTokenRepository.deleteOAuthSignupInfo(email);
     }
 
     /**
@@ -89,6 +98,9 @@ public class AuthService {
             throw new BaseException(INVALID_TEMP_CODE);
         }
 
+        String email = jwtProvider.extractEmail(tokens.getAccessToken());
+        redisTokenRepository.saveRefreshToken(email, tokens.getRefreshToken());
+
         // 사용 즉시 삭제 — 일회성 보장
         redisTokenRepository.deleteTemporaryCode(tempCode);
 
@@ -97,5 +109,13 @@ public class AuthService {
 
     public void logout(String email){
         redisTokenRepository.deleteRefreshToken(email);
+    }
+
+    private String getPendingSignupRole(String email) {
+        OAuthSignupInfoDto signupInfo = redisTokenRepository.getOAuthSignupInfo(email);
+        if (signupInfo == null) {
+            throw new BaseException(INVALID_TOKEN);
+        }
+        return signupInfo.role();
     }
 }

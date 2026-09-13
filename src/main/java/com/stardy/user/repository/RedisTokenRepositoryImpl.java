@@ -1,26 +1,42 @@
 package com.stardy.user.repository;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stardy.user.dto.OAuthSignupInfoDto;
 import com.stardy.user.dto.TokenResponseDto;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 @Repository
 public class RedisTokenRepositoryImpl implements RedisTokenRepository {
+    private static final DefaultRedisScript<Long> ROTATE_REFRESH_TOKEN_SCRIPT = new DefaultRedisScript<>(
+            "local current = redis.call('GET', KEYS[1]); " +
+                    "if current ~= ARGV[1] then return 0 end; " +
+                    "redis.call('SET', KEYS[1], ARGV[2], 'PX', ARGV[3]); " +
+                    "return 1;",
+            Long.class
+    );
+
     private final RedisTemplate<String, String> redisTemplate;
     private final long refreshTokenExpiration;
     private final long temporaryCodeExpiration;
+    private final ObjectMapper objectMapper;
 
     public RedisTokenRepositoryImpl(
             RedisTemplate<String, String> redisTemplate,
             @Value("${jwt.refresh-token-expiration}") long refreshTokenExpiration,
-            @Value("${jwt.temporary-code-expiration}") long temporaryCodeExpiration
+            @Value("${jwt.temporary-code-expiration}") long temporaryCodeExpiration,
+            ObjectMapper objectMapper
     ) {
         this.redisTemplate = redisTemplate;
         this.refreshTokenExpiration = refreshTokenExpiration;
         this.temporaryCodeExpiration = temporaryCodeExpiration;
+        this.objectMapper = objectMapper;
     }
 
     public void saveRefreshToken(String email, String refreshToken) {
@@ -33,6 +49,18 @@ public class RedisTokenRepositoryImpl implements RedisTokenRepository {
 
     public void deleteRefreshToken(String email) {
         redisTemplate.delete(email);
+    }
+
+    @Override
+    public boolean rotateRefreshToken(String email, String oldRefreshToken, String newRefreshToken) {
+        Long result = redisTemplate.execute(
+                ROTATE_REFRESH_TOKEN_SCRIPT,
+                List.of(email),
+                oldRefreshToken,
+                newRefreshToken,
+                String.valueOf(refreshTokenExpiration)
+        );
+        return Long.valueOf(1L).equals(result);
     }
 
     @Override
@@ -67,5 +95,36 @@ public class RedisTokenRepositoryImpl implements RedisTokenRepository {
     @Override
     public void deleteTemporaryCode(String tempCode) {
         redisTemplate.delete("temp:" + tempCode);
+    }
+
+    @Override
+    public void saveOAuthSignupInfo(String email, OAuthSignupInfoDto signupInfo) {
+        redisTemplate.opsForValue().set("signup:" + email, writeSignupInfo(signupInfo), refreshTokenExpiration, TimeUnit.MILLISECONDS);
+    }
+
+    @Override
+    public OAuthSignupInfoDto getOAuthSignupInfo(String email) {
+        String value = redisTemplate.opsForValue().get("signup:" + email);
+        if (value == null) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(value, OAuthSignupInfoDto.class);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("가입 대기 정보 역직렬화에 실패했습니다.", exception);
+        }
+    }
+
+    @Override
+    public void deleteOAuthSignupInfo(String email) {
+        redisTemplate.delete("signup:" + email);
+    }
+
+    private String writeSignupInfo(OAuthSignupInfoDto signupInfo) {
+        try {
+            return objectMapper.writeValueAsString(signupInfo);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("가입 대기 정보 직렬화에 실패했습니다.", exception);
+        }
     }
 }
