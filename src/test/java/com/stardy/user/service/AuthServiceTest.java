@@ -1,5 +1,6 @@
 package com.stardy.user.service;
 
+import com.stardy.user.dto.OAuthSignupInfoDto;
 import com.stardy.user.dto.TokenResponseDto;
 import com.stardy.user.entity.Role;
 import com.stardy.user.entity.User;
@@ -49,6 +50,9 @@ class AuthServiceTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private GoogleOAuth2Service googleOAuth2Service;
 
     @Test
     @DisplayName("유효한 RefreshToken으로 AccessToken과 RefreshToken을 재발급한다.")
@@ -131,19 +135,28 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("회원 정보가 없으면 예외를 던진다.")
-    void reissueWithNoUser() {
+    @DisplayName("가입 대기 사용자도 Refresh Token을 재발급한다.")
+    void reissueWithPendingSignupUser() {
         String refreshToken = "refresh-token";
         String email = "test@gmail.com";
+        OAuthSignupInfoDto signupInfo = new OAuthSignupInfoDto(
+                email, "Test User", "ROLE_USER", "GOOGLE", "google-sub", email
+        );
 
         given(jwtProvider.isTokenValid(refreshToken)).willReturn(true);
         given(jwtProvider.extractEmail(refreshToken)).willReturn(email);
         given(redisTokenRepository.getRefreshToken(email)).willReturn(refreshToken);
         given(userRepository.findByEmail(email)).willReturn(Optional.empty());
+        given(redisTokenRepository.getOAuthSignupInfo(email)).willReturn(signupInfo);
+        given(jwtProvider.createAccessToken(email, "ROLE_USER")).willReturn("new-access-token");
+        given(jwtProvider.createRefreshToken(email)).willReturn("new-refresh-token");
 
-        BaseException exception = assertThrows(BaseException.class, () -> authService.reissueToken(refreshToken));
+        TokenResponseDto result = authService.reissueToken(refreshToken);
 
-        assertBaseException(exception, ErrorCode.INVALID_TOKEN);
+        assertThat(result.getAccessToken()).isEqualTo("new-access-token");
+        assertThat(result.getRefreshToken()).isEqualTo("new-refresh-token");
+        then(redisTokenRepository).should().deleteRefreshToken(email);
+        then(redisTokenRepository).should().saveRefreshToken(email, "new-refresh-token");
     }
 
     @Test

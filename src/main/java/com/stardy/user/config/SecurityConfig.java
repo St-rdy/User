@@ -48,7 +48,7 @@ public class SecurityConfig {
                                 "/api/v1/oauth2/authorization/**",
                                 "/login/oauth2/**"
                         ).permitAll()
-                        .requestMatchers("/api/v1/auth/logout").authenticated()
+                        .requestMatchers("/api/v1/auth/logout", "/api/v1/auth/signup").authenticated()
                         .requestMatchers("/api/v1/users/**").authenticated()
                         .anyRequest().permitAll()
                 )

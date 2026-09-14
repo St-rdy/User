@@ -2,6 +2,7 @@ package com.stardy.user.controller;
 
 import com.stardy.user.dto.AccessTokenResponseDto;
 import com.stardy.user.dto.MessageResponseDto;
+import com.stardy.user.dto.OAuthSignupRequestDto;
 import com.stardy.user.dto.TokenResponseDto;
 import com.stardy.user.exception.BaseException;
 import com.stardy.user.global.JwtProvider;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Duration;
@@ -55,6 +57,16 @@ public class AuthController {
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, createRefreshTokenCookie(tokens.getRefreshToken()).toString())
                 .body(createAccessTokenResponse(tokens.getAccessToken()));
+    }
+
+    @PostMapping("/signup")
+    public ResponseEntity<MessageResponseDto> completeSignup(
+            @RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false) String authorization,
+            @RequestBody OAuthSignupRequestDto request
+    ) {
+        String email = jwtProvider.extractEmail(extractBearerToken(authorization));
+        authService.completeSignup(email, request.nickname(), request.profileImageUrl(), request.domain());
+        return ResponseEntity.ok(new MessageResponseDto("가입이 완료되었습니다."));
     }
 
     @PostMapping("/token/refresh")

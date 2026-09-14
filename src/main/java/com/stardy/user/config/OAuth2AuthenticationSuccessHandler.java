@@ -48,10 +48,13 @@ public class OAuth2AuthenticationSuccessHandler implements AuthenticationSuccess
 
         OAuth2User oauthUser = oauthToken.getPrincipal();
         GoogleOAuth2Service.OAuthLoginUser user = googleOAuth2Service.login(oauthUser.getAttributes());
-        String temporaryCode = authService.issueTemporaryCode(user.email(), user.role());
+        String temporaryCode = user.requiresSignup()
+                ? authService.issueTemporaryCode(user.signupInfo().email(), user.signupInfo().role(), user.signupInfo())
+                : authService.issueTemporaryCode(user.email(), user.role());
 
         String redirectUri = UriComponentsBuilder.fromUriString(frontendRedirectUri)
                 .queryParam("code", temporaryCode)
+                .queryParam("signupRequired", user.requiresSignup())
                 .build()
                 .toUriString();
 

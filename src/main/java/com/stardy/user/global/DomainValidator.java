@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stardy.user.exception.BaseException;
 import jakarta.annotation.PostConstruct;
+import lombok.Getter;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 
@@ -22,11 +23,13 @@ public class DomainValidator {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final Set<String> allowedRegions = new HashSet<>();
     private final Set<String> allowedSubjects = new HashSet<>();
+    @Getter
+    private Map<String, List<Map<String, String>>> domainOptions;
 
     @PostConstruct
     public void loadDomains() throws IOException {
         ClassPathResource resource = new ClassPathResource("static/domain.json");
-        Map<String, List<Map<String, String>>> domainOptions = objectMapper.readValue(
+        domainOptions = objectMapper.readValue(
                 resource.getInputStream(),
                 new TypeReference<>() {
                 }

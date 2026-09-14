@@ -2,6 +2,7 @@ package com.stardy.user.config;
 
 import com.stardy.user.service.AuthService;
 import com.stardy.user.service.GoogleOAuth2Service;
+import com.stardy.user.dto.OAuthSignupInfoDto;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -40,7 +41,7 @@ class OAuth2AuthenticationSuccessHandlerTest {
                 "google"
         );
         given(googleOAuth2Service.login(oauthUser.getAttributes()))
-                .willReturn(new GoogleOAuth2Service.OAuthLoginUser("test@gmail.com", "ROLE_USER"));
+                .willReturn(new GoogleOAuth2Service.OAuthLoginUser("test@gmail.com", "ROLE_USER", null));
         given(authService.issueTemporaryCode("test@gmail.com", "ROLE_USER"))
                 .willReturn("550e8400-e29b-41d4-a716-446655440000");
 
@@ -49,6 +50,34 @@ class OAuth2AuthenticationSuccessHandlerTest {
 
         assertThat(response.getStatus()).isEqualTo(302);
         assertThat(response.getRedirectedUrl())
-                .isEqualTo("http://localhost:3000/oauth/callback?code=550e8400-e29b-41d4-a716-446655440000");
+                .isEqualTo("http://localhost:3000/oauth/callback?code=550e8400-e29b-41d4-a716-446655440000&signupRequired=false");
+    }
+
+    @Test
+    @DisplayName("신규 Google 로그인은 토큰 교환 UUID와 가입대기 정보를 함께 발급한다.")
+    void redirectNewUserWithTemporaryCode() throws Exception {
+        GoogleOAuth2Service googleOAuth2Service = mock(GoogleOAuth2Service.class);
+        AuthService authService = mock(AuthService.class);
+        OAuth2AuthenticationSuccessHandler handler = new OAuth2AuthenticationSuccessHandler(
+                googleOAuth2Service, authService, "http://localhost:3000/oauth/callback"
+        );
+        OAuthSignupInfoDto signupInfo = new OAuthSignupInfoDto(
+                "new@gmail.com", "New User", "ROLE_USER", "GOOGLE", "google-sub", "new@gmail.com"
+        );
+        DefaultOAuth2User oauthUser = new DefaultOAuth2User(
+                List.of(new SimpleGrantedAuthority("ROLE_USER")), Map.of("sub", "google-sub"), "sub"
+        );
+        OAuth2AuthenticationToken authentication = new OAuth2AuthenticationToken(
+                oauthUser, oauthUser.getAuthorities(), "google"
+        );
+        given(googleOAuth2Service.login(oauthUser.getAttributes()))
+                .willReturn(GoogleOAuth2Service.OAuthLoginUser.signup(signupInfo));
+        given(authService.issueTemporaryCode(signupInfo.email(), signupInfo.role(), signupInfo)).willReturn("temporary-code");
+
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        handler.onAuthenticationSuccess(new MockHttpServletRequest(), response, authentication);
+
+        assertThat(response.getRedirectedUrl())
+                .isEqualTo("http://localhost:3000/oauth/callback?code=temporary-code&signupRequired=true");
     }
 }

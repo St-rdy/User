@@ -95,6 +95,21 @@ class AuthControllerTest {
     }
 
     @Test
+    @DisplayName("가입 정보를 완료하면 토큰 교환용 임시 코드를 반환한다.")
+    void completeSignup() throws Exception {
+        String accessToken = "access-token";
+        given(jwtProvider.isTokenValid(accessToken)).willReturn(true);
+        given(jwtProvider.extractEmail(accessToken)).willReturn("new@gmail.com");
+
+        mockMvc.perform(post("/api/v1/auth/signup")
+                        .contentType("application/json")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                        .content("{\"nickname\":\"스터디\",\"profileImageUrl\":\"https://example.com/profile.png\",\"domain\":{\"regions\":[\"Seoul\"],\"subjects\":[\"Mathematics\"]}}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("가입이 완료되었습니다."));
+    }
+
+    @Test
     @DisplayName("Refresh Token Cookie로 Access Token과 새 Refresh Token을 재발급한다.")
     void reissueToken() throws Exception {
         given(authService.reissueToken("old-refresh-token"))

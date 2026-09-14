@@ -1,5 +1,8 @@
 package com.stardy.user.repository;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stardy.user.dto.OAuthSignupInfoDto;
 import com.stardy.user.dto.TokenResponseDto;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.beans.factory.annotation.Value;
@@ -12,15 +15,18 @@ public class RedisTokenRepositoryImpl implements RedisTokenRepository {
     private final RedisTemplate<String, String> redisTemplate;
     private final long refreshTokenExpiration;
     private final long temporaryCodeExpiration;
+    private final ObjectMapper objectMapper;
 
     public RedisTokenRepositoryImpl(
             RedisTemplate<String, String> redisTemplate,
             @Value("${jwt.refresh-token-expiration}") long refreshTokenExpiration,
-            @Value("${jwt.temporary-code-expiration}") long temporaryCodeExpiration
+            @Value("${jwt.temporary-code-expiration}") long temporaryCodeExpiration,
+            ObjectMapper objectMapper
     ) {
         this.redisTemplate = redisTemplate;
         this.refreshTokenExpiration = refreshTokenExpiration;
         this.temporaryCodeExpiration = temporaryCodeExpiration;
+        this.objectMapper = objectMapper;
     }
 
     public void saveRefreshToken(String email, String refreshToken) {
@@ -67,5 +73,36 @@ public class RedisTokenRepositoryImpl implements RedisTokenRepository {
     @Override
     public void deleteTemporaryCode(String tempCode) {
         redisTemplate.delete("temp:" + tempCode);
+    }
+
+    @Override
+    public void saveOAuthSignupInfo(String email, OAuthSignupInfoDto signupInfo) {
+        redisTemplate.opsForValue().set("signup:" + email, writeSignupInfo(signupInfo), refreshTokenExpiration, TimeUnit.MILLISECONDS);
+    }
+
+    @Override
+    public OAuthSignupInfoDto getOAuthSignupInfo(String email) {
+        String value = redisTemplate.opsForValue().get("signup:" + email);
+        if (value == null) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(value, OAuthSignupInfoDto.class);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("가입 대기 정보 역직렬화에 실패했습니다.", exception);
+        }
+    }
+
+    @Override
+    public void deleteOAuthSignupInfo(String email) {
+        redisTemplate.delete("signup:" + email);
+    }
+
+    private String writeSignupInfo(OAuthSignupInfoDto signupInfo) {
+        try {
+            return objectMapper.writeValueAsString(signupInfo);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("가입 대기 정보 직렬화에 실패했습니다.", exception);
+        }
     }
 }
