@@ -64,8 +64,9 @@ public class AuthController {
             @RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false) String authorization,
             @RequestBody OAuthSignupRequestDto request
     ) {
-        String email = jwtProvider.extractEmail(extractBearerToken(authorization));
-        authService.completeSignup(email, request.nickname(), request.profileImageUrl(), request.domain());
+        String token = extractBearerToken(authorization);
+        authService.completeSignup(jwtProvider.extractProvider(token), jwtProvider.extractSocialId(token),
+                request.nickname(), request.profileImageUrl(), request.domain());
         return ResponseEntity.ok(new MessageResponseDto("가입이 완료되었습니다."));
     }
 
@@ -89,9 +90,7 @@ public class AuthController {
             @RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false) String authorization
     ) {
         String accessToken = extractBearerToken(authorization);
-        String email = jwtProvider.extractEmail(accessToken);
-
-        authService.logout(email);
+        authService.logout(jwtProvider.extractProvider(accessToken), jwtProvider.extractSocialId(accessToken));
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, expireRefreshTokenCookie().toString())

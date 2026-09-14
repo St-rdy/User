@@ -8,6 +8,7 @@ public interface RedisTokenRepository {
     void saveRefreshToken(String email, String refreshToken);
     String getRefreshToken(String email);
     void deleteRefreshToken(String email);
+    boolean rotateRefreshToken(String email, String oldRefreshToken, String newRefreshToken);
 
     // 임시 코드 관련 Redis 작업
     void saveTemporaryCode(String tempCode, TokenResponseDto tokens);

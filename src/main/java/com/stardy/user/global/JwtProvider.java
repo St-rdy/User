@@ -29,9 +29,10 @@ public class JwtProvider {
     }
 
     // AccessToken 생성
-    public String createAccessToken(String email, String role){
+    public String createAccessToken(String socialId, String provider, String role){
         return Jwts.builder()
-                .subject(email)
+                .subject(socialId)
+                .claim("provider", provider)
                 .claim("role", role)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + accessTokenExpiration))
@@ -40,9 +41,10 @@ public class JwtProvider {
     }
 
     // RefreshToken 생성
-    public String createRefreshToken(String email) {
+    public String createRefreshToken(String socialId, String provider) {
         return Jwts.builder()
-                .subject(email)
+                .subject(socialId)
+                .claim("provider", provider)
                 .id(UUID.randomUUID().toString())
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + refreshTokenExpiration))
@@ -51,8 +53,12 @@ public class JwtProvider {
     }
 
     // 토큰에서 이메일 추출
-    public String extractEmail(String token) {
+    public String extractSocialId(String token) {
         return parseClaims(token).getSubject();
+    }
+
+    public String extractProvider(String token) {
+        return parseClaims(token).get("provider", String.class);
     }
 
     // 토큰 유효성 검사

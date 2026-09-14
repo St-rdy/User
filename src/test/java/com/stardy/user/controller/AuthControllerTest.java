@@ -99,7 +99,8 @@ class AuthControllerTest {
     void completeSignup() throws Exception {
         String accessToken = "access-token";
         given(jwtProvider.isTokenValid(accessToken)).willReturn(true);
-        given(jwtProvider.extractEmail(accessToken)).willReturn("new@gmail.com");
+        given(jwtProvider.extractProvider(accessToken)).willReturn("GOOGLE");
+        given(jwtProvider.extractSocialId(accessToken)).willReturn("google-sub");
 
         mockMvc.perform(post("/api/v1/auth/signup")
                         .contentType("application/json")
@@ -137,7 +138,8 @@ class AuthControllerTest {
     void logout() throws Exception {
         String accessToken = "access-token";
         given(jwtProvider.isTokenValid(accessToken)).willReturn(true);
-        given(jwtProvider.extractEmail(accessToken)).willReturn("test@gmail.com");
+        given(jwtProvider.extractProvider(accessToken)).willReturn("GOOGLE");
+        given(jwtProvider.extractSocialId(accessToken)).willReturn("google-sub");
 
         mockMvc.perform(post("/api/v1/auth/logout")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
@@ -146,7 +148,7 @@ class AuthControllerTest {
                 .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("Max-Age=0")))
                 .andExpect(jsonPath("$.message").value("로그아웃이 완료되었습니다."));
 
-        then(authService).should().logout("test@gmail.com");
+        then(authService).should().logout("GOOGLE", "google-sub");
     }
 
     @Test

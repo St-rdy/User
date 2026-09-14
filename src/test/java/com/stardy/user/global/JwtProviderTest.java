@@ -9,7 +9,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /*
 생성  →  createAccessToken(), createRefreshToken()
 검증  →  isTokenValid()
-추출  →  extractEmail(), extractRole()
+추출  →  extractSocialId(), extractProvider(), extractRole()
 
 @author Jinwook Jung
  */
@@ -29,10 +29,10 @@ class JwtProviderTest {
     @Test
     @DisplayName("AccessToken을 생성할 수 있다.")
     void createAccessToken() {
-        String email = "test@gmail.com";
+        String socialId = "google-sub";
         String role = "ROLE_USER";
 
-        String token = jwtProvider.createAccessToken(email, role);
+        String token = jwtProvider.createAccessToken(socialId, "GOOGLE", role);
 
         assertThat(token).isNotNull();
         assertThat(token).isNotEmpty();
@@ -42,10 +42,10 @@ class JwtProviderTest {
     @DisplayName("RefreshToken을 생성할 수 있다.")
     void createRefreshToken() {
         // given
-        String email = "test@gmail.com";
+        String socialId = "google-sub";
 
         // when
-        String token = jwtProvider.createRefreshToken(email);
+        String token = jwtProvider.createRefreshToken(socialId, "GOOGLE");
 
         // then
         assertThat(token).isNotNull();
@@ -53,49 +53,51 @@ class JwtProviderTest {
     }
 
     @Test
-    @DisplayName("같은 이메일로 연속 생성한 RefreshToken은 서로 달라야 한다.")
+    @DisplayName("같은 소셜 식별자로 연속 생성한 RefreshToken은 서로 달라야 한다.")
     void refreshTokenShouldBeUnique() {
-        String email = "test@gmail.com";
+        String socialId = "google-sub";
 
-        String firstToken = jwtProvider.createRefreshToken(email);
-        String secondToken = jwtProvider.createRefreshToken(email);
+        String firstToken = jwtProvider.createRefreshToken(socialId, "GOOGLE");
+        String secondToken = jwtProvider.createRefreshToken(socialId, "GOOGLE");
 
         assertThat(firstToken).isNotEqualTo(secondToken);
     }
 
     @Test
-    @DisplayName("AccessToken에서 이메일을 추출할 수 있다.")
-    void extractEmailFromToken() {
+    @DisplayName("AccessToken에서 provider와 socialId를 추출할 수 있다.")
+    void extractSocialIdentityFromToken() {
         // given
-        String email = "test@gmail.com";
-        String token = jwtProvider.createAccessToken(email, "ROLE_USER");
+        String socialId = "google-sub";
+        String token = jwtProvider.createAccessToken(socialId, "GOOGLE", "ROLE_USER");
 
         // when
-        String extractedEmail = jwtProvider.extractEmail(token);
+        String extractedSocialId = jwtProvider.extractSocialId(token);
 
         // then
-        assertThat(extractedEmail).isEqualTo(email);
+        assertThat(extractedSocialId).isEqualTo(socialId);
+        assertThat(jwtProvider.extractProvider(token)).isEqualTo("GOOGLE");
     }
 
     @Test
-    @DisplayName("RefreshToken에서 이메일을 추출할 수 있다.")
-    void extractEmailFromRefreshToken() {
+    @DisplayName("RefreshToken에서 provider와 socialId를 추출할 수 있다.")
+    void extractSocialIdentityFromRefreshToken() {
         // given
-        String email = "test@gmail.com";
-        String token = jwtProvider.createRefreshToken(email);
+        String socialId = "google-sub";
+        String token = jwtProvider.createRefreshToken(socialId, "GOOGLE");
 
         // when
-        String extractedEmail = jwtProvider.extractEmail(token);
+        String extractedSocialId = jwtProvider.extractSocialId(token);
 
         // then
-        assertThat(extractedEmail).isEqualTo(email);
+        assertThat(extractedSocialId).isEqualTo(socialId);
+        assertThat(jwtProvider.extractProvider(token)).isEqualTo("GOOGLE");
     }
 
     @Test
     @DisplayName("유효한 토큰은 검증을 통과한다.")
     void validTokenPassesValidation() {
         // given
-        String token = jwtProvider.createAccessToken("test@gmail.com", "ROLE_USER");
+        String token = jwtProvider.createAccessToken("google-sub", "GOOGLE", "ROLE_USER");
 
         // when
         boolean isValid = jwtProvider.isTokenValid(token);
@@ -113,7 +115,7 @@ class JwtProviderTest {
                 0L,
                 0L
         );
-        String token = expiredJwtProvider.createAccessToken("test@gmail.com", "ROLE_USER");
+        String token = expiredJwtProvider.createAccessToken("google-sub", "GOOGLE", "ROLE_USER");
 
         // when
         boolean isValid = jwtProvider.isTokenValid(token);
@@ -137,7 +139,7 @@ class JwtProviderTest {
     void extractRoleFromAccessToken() {
         // given
         String role = "ROLE_USER";
-        String token = jwtProvider.createAccessToken("test@gmail.com", role);
+        String token = jwtProvider.createAccessToken("google-sub", "GOOGLE", role);
 
         // when
         String extractedRole = jwtProvider.extractRole(token);
@@ -149,7 +151,7 @@ class JwtProviderTest {
     @Test
     @DisplayName("RefreshToken에서 role을 추출할 수 없다.")
     void canNotExtractRoleFromRefreshToken() {
-        String token = jwtProvider.createRefreshToken("test@gmail.com");
+        String token = jwtProvider.createRefreshToken("google-sub", "GOOGLE");
 
         String extractedRole = jwtProvider.extractRole(token);
 
@@ -166,7 +168,7 @@ class JwtProviderTest {
                 1800000L,
                 0L
         );
-        String token = expiredJwtProvider.createRefreshToken("test@gmail.com");
+        String token = expiredJwtProvider.createRefreshToken("google-sub", "GOOGLE");
 
         // when
         boolean isValid = jwtProvider.isTokenValid(token);
@@ -184,7 +186,7 @@ class JwtProviderTest {
                 1800000L,
                 604800000L
         );
-        String token = otherJwtProvider.createAccessToken("test@gmail.com", "ROLE_USER");
+        String token = otherJwtProvider.createAccessToken("google-sub", "GOOGLE", "ROLE_USER");
 
         // when
         boolean isValid = jwtProvider.isTokenValid(token);

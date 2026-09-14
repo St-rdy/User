@@ -30,4 +30,12 @@ class OAuth2AuthorizationEndpointTest {
                 .andExpect(status().is3xxRedirection())
                 .andExpect(header().string("Location", containsString("accounts.google.com")));
     }
+
+    @Test
+    @DisplayName("API 버전 경로의 Naver OAuth2 시작 요청은 Naver 인증 페이지로 리다이렉트한다.")
+    void redirectToNaverAuthorizationPage() throws Exception {
+        mockMvc.perform(get("/api/v1/oauth2/authorization/naver"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(header().string("Location", containsString("nid.naver.com/oauth2.0/authorize")));
+    }
 }

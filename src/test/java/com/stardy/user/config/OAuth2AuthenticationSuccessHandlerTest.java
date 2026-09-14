@@ -2,6 +2,7 @@ package com.stardy.user.config;
 
 import com.stardy.user.service.AuthService;
 import com.stardy.user.service.GoogleOAuth2Service;
+import com.stardy.user.service.NaverOAuth2Service;
 import com.stardy.user.dto.OAuthSignupInfoDto;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -24,9 +25,11 @@ class OAuth2AuthenticationSuccessHandlerTest {
     @DisplayName("Google 로그인 성공 시 JWT 대신 UUID 임시 코드를 프론트로 리다이렉트한다.")
     void redirectWithTemporaryCode() throws Exception {
         GoogleOAuth2Service googleOAuth2Service = mock(GoogleOAuth2Service.class);
+        NaverOAuth2Service naverOAuth2Service = mock(NaverOAuth2Service.class);
         AuthService authService = mock(AuthService.class);
         OAuth2AuthenticationSuccessHandler handler = new OAuth2AuthenticationSuccessHandler(
                 googleOAuth2Service,
+                naverOAuth2Service,
                 authService,
                 "http://localhost:3000/oauth/callback"
         );
@@ -41,8 +44,8 @@ class OAuth2AuthenticationSuccessHandlerTest {
                 "google"
         );
         given(googleOAuth2Service.login(oauthUser.getAttributes()))
-                .willReturn(new GoogleOAuth2Service.OAuthLoginUser("test@gmail.com", "ROLE_USER", null));
-        given(authService.issueTemporaryCode("test@gmail.com", "ROLE_USER"))
+                .willReturn(new GoogleOAuth2Service.OAuthLoginUser("GOOGLE", "google-sub", "ROLE_USER", null));
+        given(authService.issueTemporaryCode("GOOGLE", "google-sub", "ROLE_USER"))
                 .willReturn("550e8400-e29b-41d4-a716-446655440000");
 
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -57,9 +60,10 @@ class OAuth2AuthenticationSuccessHandlerTest {
     @DisplayName("신규 Google 로그인은 토큰 교환 UUID와 가입대기 정보를 함께 발급한다.")
     void redirectNewUserWithTemporaryCode() throws Exception {
         GoogleOAuth2Service googleOAuth2Service = mock(GoogleOAuth2Service.class);
+        NaverOAuth2Service naverOAuth2Service = mock(NaverOAuth2Service.class);
         AuthService authService = mock(AuthService.class);
         OAuth2AuthenticationSuccessHandler handler = new OAuth2AuthenticationSuccessHandler(
-                googleOAuth2Service, authService, "http://localhost:3000/oauth/callback"
+                googleOAuth2Service, naverOAuth2Service, authService, "http://localhost:3000/oauth/callback"
         );
         OAuthSignupInfoDto signupInfo = new OAuthSignupInfoDto(
                 "new@gmail.com", "New User", "ROLE_USER", "GOOGLE", "google-sub", "new@gmail.com"
@@ -72,7 +76,36 @@ class OAuth2AuthenticationSuccessHandlerTest {
         );
         given(googleOAuth2Service.login(oauthUser.getAttributes()))
                 .willReturn(GoogleOAuth2Service.OAuthLoginUser.signup(signupInfo));
-        given(authService.issueTemporaryCode(signupInfo.email(), signupInfo.role(), signupInfo)).willReturn("temporary-code");
+        given(authService.issueTemporaryCode(signupInfo.provider(), signupInfo.socialId(), signupInfo.role(), signupInfo)).willReturn("temporary-code");
+
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        handler.onAuthenticationSuccess(new MockHttpServletRequest(), response, authentication);
+
+        assertThat(response.getRedirectedUrl())
+                .isEqualTo("http://localhost:3000/oauth/callback?code=temporary-code&signupRequired=true");
+    }
+
+    @Test
+    @DisplayName("Naver 신규 로그인은 Google과 동일하게 가입대기 UUID를 프론트로 리다이렉트한다.")
+    void redirectNewNaverUserWithTemporaryCode() throws Exception {
+        GoogleOAuth2Service googleOAuth2Service = mock(GoogleOAuth2Service.class);
+        NaverOAuth2Service naverOAuth2Service = mock(NaverOAuth2Service.class);
+        AuthService authService = mock(AuthService.class);
+        OAuth2AuthenticationSuccessHandler handler = new OAuth2AuthenticationSuccessHandler(
+                googleOAuth2Service, naverOAuth2Service, authService, "http://localhost:3000/oauth/callback"
+        );
+        OAuthSignupInfoDto signupInfo = new OAuthSignupInfoDto(
+                "new@naver.com", "Naver User", "ROLE_USER", "NAVER", "naver-id", "new@naver.com"
+        );
+        DefaultOAuth2User oauthUser = new DefaultOAuth2User(
+                List.of(new SimpleGrantedAuthority("ROLE_USER")), Map.of("response", Map.of("id", "naver-id")), "response"
+        );
+        OAuth2AuthenticationToken authentication = new OAuth2AuthenticationToken(
+                oauthUser, oauthUser.getAuthorities(), "naver"
+        );
+        given(naverOAuth2Service.login(oauthUser.getAttributes()))
+                .willReturn(GoogleOAuth2Service.OAuthLoginUser.signup(signupInfo));
+        given(authService.issueTemporaryCode(signupInfo.provider(), signupInfo.socialId(), signupInfo.role(), signupInfo)).willReturn("temporary-code");
 
         MockHttpServletResponse response = new MockHttpServletResponse();
         handler.onAuthenticationSuccess(new MockHttpServletRequest(), response, authentication);
