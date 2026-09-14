@@ -67,11 +67,11 @@ class AuthServiceTest {
         given(jwtProvider.isTokenValid(oldRefreshToken)).willReturn(true);
         given(jwtProvider.extractEmail(oldRefreshToken)).willReturn(email);
 
-        given(redisTokenRepository.getRefreshToken(email)).willReturn(oldRefreshToken);
         given(userRepository.findByEmail(email)).willReturn(Optional.of(createUserWithRole(email, role)));
 
         given(jwtProvider.createAccessToken(eq(email), eq(role))).willReturn(newAccessToken);
         given(jwtProvider.createRefreshToken(email)).willReturn(newRefreshToken);
+        given(redisTokenRepository.rotateRefreshToken(email, oldRefreshToken, newRefreshToken)).willReturn(true);
 
         // when
         TokenResponseDto result = authService.reissueToken(oldRefreshToken);
@@ -79,8 +79,7 @@ class AuthServiceTest {
         // then
         assertThat(result.getAccessToken()).isEqualTo(newAccessToken);
         assertThat(result.getRefreshToken()).isEqualTo(newRefreshToken);
-        then(redisTokenRepository).should().deleteRefreshToken(email);
-        then(redisTokenRepository).should().saveRefreshToken(email, newRefreshToken);
+        then(redisTokenRepository).should().rotateRefreshToken(email, oldRefreshToken, newRefreshToken);
     }
 
     @Test
@@ -103,11 +102,15 @@ class AuthServiceTest {
         // given
         String stolenToken = "stolen-token";
         String email = "test@gmail.com";
-        String storedToken = "real-refresh-token";
+        String newAccessToken = "new-access-token";
+        String newRefreshToken = "new-refresh-token";
 
         given(jwtProvider.isTokenValid(stolenToken)).willReturn(true);
         given(jwtProvider.extractEmail(stolenToken)).willReturn(email);
-        given(redisTokenRepository.getRefreshToken(email)).willReturn(storedToken);
+        given(userRepository.findByEmail(email)).willReturn(Optional.of(createUserWithRole(email, "ROLE_USER")));
+        given(jwtProvider.createAccessToken(email, "ROLE_USER")).willReturn(newAccessToken);
+        given(jwtProvider.createRefreshToken(email)).willReturn(newRefreshToken);
+        given(redisTokenRepository.rotateRefreshToken(email, stolenToken, newRefreshToken)).willReturn(false);
 
         // when
         BaseException exception = assertThrows(BaseException.class, () -> authService.reissueToken(stolenToken));
@@ -125,7 +128,10 @@ class AuthServiceTest {
 
         given(jwtProvider.isTokenValid(refreshToken)).willReturn(true);
         given(jwtProvider.extractEmail(refreshToken)).willReturn(email);
-        given(redisTokenRepository.getRefreshToken(email)).willReturn(null); // Redis에 없는 경우
+        given(userRepository.findByEmail(email)).willReturn(Optional.of(createUserWithRole(email, "ROLE_USER")));
+        given(jwtProvider.createAccessToken(email, "ROLE_USER")).willReturn("new-access-token");
+        given(jwtProvider.createRefreshToken(email)).willReturn("new-refresh-token");
+        given(redisTokenRepository.rotateRefreshToken(email, refreshToken, "new-refresh-token")).willReturn(false);
 
         // when
         BaseException exception = assertThrows(BaseException.class, () -> authService.reissueToken(refreshToken));
@@ -145,18 +151,17 @@ class AuthServiceTest {
 
         given(jwtProvider.isTokenValid(refreshToken)).willReturn(true);
         given(jwtProvider.extractEmail(refreshToken)).willReturn(email);
-        given(redisTokenRepository.getRefreshToken(email)).willReturn(refreshToken);
         given(userRepository.findByEmail(email)).willReturn(Optional.empty());
         given(redisTokenRepository.getOAuthSignupInfo(email)).willReturn(signupInfo);
         given(jwtProvider.createAccessToken(email, "ROLE_USER")).willReturn("new-access-token");
         given(jwtProvider.createRefreshToken(email)).willReturn("new-refresh-token");
+        given(redisTokenRepository.rotateRefreshToken(email, refreshToken, "new-refresh-token")).willReturn(true);
 
         TokenResponseDto result = authService.reissueToken(refreshToken);
 
         assertThat(result.getAccessToken()).isEqualTo("new-access-token");
         assertThat(result.getRefreshToken()).isEqualTo("new-refresh-token");
-        then(redisTokenRepository).should().deleteRefreshToken(email);
-        then(redisTokenRepository).should().saveRefreshToken(email, "new-refresh-token");
+        then(redisTokenRepository).should().rotateRefreshToken(email, refreshToken, "new-refresh-token");
     }
 
     @Test
