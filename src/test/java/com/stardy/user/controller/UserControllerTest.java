@@ -3,6 +3,7 @@ package com.stardy.user.controller;
 import com.stardy.user.dto.UserDto;
 import com.stardy.user.exception.GlobalExceptionHandler;
 import com.stardy.user.global.JwtProvider;
+import com.stardy.user.service.AuthService;
 import com.stardy.user.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -18,8 +19,12 @@ import java.util.List;
 import java.util.Map;
 
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @ExtendWith(MockitoExtension.class)
@@ -31,11 +36,14 @@ class UserControllerTest {
     private UserService userService;
 
     @Mock
+    private AuthService authService;
+
+    @Mock
     private JwtProvider jwtProvider;
 
     @BeforeEach
     void setUp() {
-        UserController userController = new UserController(userService, jwtProvider);
+        UserController userController = new UserController(userService, authService, jwtProvider);
 
         mockMvc = MockMvcBuilders.standaloneSetup(userController)
                 .setControllerAdvice(new GlobalExceptionHandler())
@@ -104,5 +112,76 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.images[0].url").value("https://example.com/profile-1.png"))
                 .andExpect(jsonPath("$.images[1].id").value(2))
                 .andExpect(jsonPath("$.images[1].url").value("https://example.com/profile-2.png"));
+    }
+
+    @Test
+    @DisplayName("내 닉네임을 변경한다.")
+    void changeNickname() throws Exception {
+        String accessToken = "access-token";
+        given(jwtProvider.isTokenValid(accessToken)).willReturn(true);
+        given(jwtProvider.extractEmail(accessToken)).willReturn("test@gmail.com");
+
+        mockMvc.perform(patch("/api/v1/users/me/nickname")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                        .contentType("application/json")
+                        .content("{\"nickname\":\"new-nickname\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("닉네임이 변경되었습니다."));
+
+        then(userService).should().changeNickname("test@gmail.com", "new-nickname");
+    }
+
+    @Test
+    @DisplayName("내 프로필 이미지를 변경한다.")
+    void changeProfileImage() throws Exception {
+        String accessToken = "access-token";
+        given(jwtProvider.isTokenValid(accessToken)).willReturn(true);
+        given(jwtProvider.extractEmail(accessToken)).willReturn("test@gmail.com");
+
+        mockMvc.perform(patch("/api/v1/users/me/profile-image")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                        .contentType("application/json")
+                        .content("{\"profileImageUrl\":\"https://example.com/new.png\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("프로필 이미지가 변경되었습니다."));
+
+        then(userService).should().changeProfileImage("test@gmail.com", "https://example.com/new.png");
+    }
+
+    @Test
+    @DisplayName("내 관심 지역과 과목을 변경한다.")
+    void changeDomain() throws Exception {
+        String accessToken = "access-token";
+        given(jwtProvider.isTokenValid(accessToken)).willReturn(true);
+        given(jwtProvider.extractEmail(accessToken)).willReturn("test@gmail.com");
+
+        mockMvc.perform(patch("/api/v1/users/me/domain")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                        .contentType("application/json")
+                        .content("{\"domain\":{\"regions\":[\"Seoul\"],\"subjects\":[\"Mathematics\"]}}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("관심 지역 및 과목이 변경되었습니다."));
+
+        then(userService).should().changeDomain(
+                "test@gmail.com", Map.of("regions", List.of("Seoul"), "subjects", List.of("Mathematics"))
+        );
+    }
+
+    @Test
+    @DisplayName("회원 탈퇴 시 Refresh Token을 삭제한다.")
+    void deleteUser() throws Exception {
+        String accessToken = "access-token";
+        given(jwtProvider.isTokenValid(accessToken)).willReturn(true);
+        given(jwtProvider.extractEmail(accessToken)).willReturn("test@gmail.com");
+
+        mockMvc.perform(delete("/api/v1/users/me")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.SET_COOKIE, org.hamcrest.Matchers.containsString("refreshToken=")))
+                .andExpect(header().string(HttpHeaders.SET_COOKIE, org.hamcrest.Matchers.containsString("Max-Age=0")))
+                .andExpect(jsonPath("$.message").value("회원 탈퇴가 완료되었습니다."));
+
+        then(userService).should().deleteUser("test@gmail.com");
+        then(authService).should().logout("test@gmail.com");
     }
 }

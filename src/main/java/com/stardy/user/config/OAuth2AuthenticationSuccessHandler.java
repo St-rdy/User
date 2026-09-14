@@ -2,6 +2,7 @@ package com.stardy.user.config;
 
 import com.stardy.user.service.AuthService;
 import com.stardy.user.service.GoogleOAuth2Service;
+import com.stardy.user.service.NaverOAuth2Service;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -19,17 +20,21 @@ import java.io.IOException;
 public class OAuth2AuthenticationSuccessHandler implements AuthenticationSuccessHandler {
 
     private static final String GOOGLE = "google";
+    private static final String NAVER = "naver";
 
     private final GoogleOAuth2Service googleOAuth2Service;
+    private final NaverOAuth2Service naverOAuth2Service;
     private final AuthService authService;
     private final String frontendRedirectUri;
 
     public OAuth2AuthenticationSuccessHandler(
             GoogleOAuth2Service googleOAuth2Service,
+            NaverOAuth2Service naverOAuth2Service,
             AuthService authService,
             @Value("${app.oauth2.frontend-redirect-uri}") String frontendRedirectUri
     ) {
         this.googleOAuth2Service = googleOAuth2Service;
+        this.naverOAuth2Service = naverOAuth2Service;
         this.authService = authService;
         this.frontendRedirectUri = frontendRedirectUri;
     }
@@ -41,16 +46,19 @@ public class OAuth2AuthenticationSuccessHandler implements AuthenticationSuccess
             Authentication authentication
     ) throws IOException, ServletException {
         OAuth2AuthenticationToken oauthToken = (OAuth2AuthenticationToken) authentication;
-        if (!GOOGLE.equals(oauthToken.getAuthorizedClientRegistrationId())) {
+        String registrationId = oauthToken.getAuthorizedClientRegistrationId();
+        if (!GOOGLE.equals(registrationId) && !NAVER.equals(registrationId)) {
             response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
             return;
         }
 
         OAuth2User oauthUser = oauthToken.getPrincipal();
-        GoogleOAuth2Service.OAuthLoginUser user = googleOAuth2Service.login(oauthUser.getAttributes());
+        GoogleOAuth2Service.OAuthLoginUser user = GOOGLE.equals(registrationId)
+                ? googleOAuth2Service.login(oauthUser.getAttributes())
+                : naverOAuth2Service.login(oauthUser.getAttributes());
         String temporaryCode = user.requiresSignup()
-                ? authService.issueTemporaryCode(user.signupInfo().email(), user.signupInfo().role(), user.signupInfo())
-                : authService.issueTemporaryCode(user.email(), user.role());
+                ? authService.issueTemporaryCode(user.provider(), user.socialId(), user.role(), user.signupInfo())
+                : authService.issueTemporaryCode(user.provider(), user.socialId(), user.role());
 
         String redirectUri = UriComponentsBuilder.fromUriString(frontendRedirectUri)
                 .queryParam("code", temporaryCode)

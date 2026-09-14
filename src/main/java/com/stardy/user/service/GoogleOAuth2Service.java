@@ -43,7 +43,8 @@ public class GoogleOAuth2Service {
         String socialId = requiredAttribute(attributes, "sub");
 
         return userProviderRepository.findByProviderAndSocialId(GOOGLE, socialId)
-                .map(userProvider -> OAuthLoginUser.from(userProvider.getUser()))
+                .map(userProvider -> OAuthLoginUser.existing(
+                        userProvider.getProvider(), userProvider.getSocialId(), userProvider.getUser()))
                 .orElseGet(() -> prepareSignup(attributes, socialId));
     }
 
@@ -51,9 +52,7 @@ public class GoogleOAuth2Service {
         String email = requiredAttribute(attributes, "email");
         String name = optionalAttribute(attributes, "name", email);
 
-        return userRepository.findByEmail(email)
-                .map(user -> connectProviderAndReturn(user, socialId, email))
-                .orElseGet(() -> OAuthLoginUser.signup(new OAuthSignupInfoDto(email, name, DEFAULT_ROLE_ID, GOOGLE, socialId, email)));
+        return OAuthLoginUser.signup(new OAuthSignupInfoDto(email, name, DEFAULT_ROLE_ID, GOOGLE, socialId, email));
     }
 
     @Transactional
@@ -82,12 +81,7 @@ public class GoogleOAuth2Service {
         ));
         userProviderRepository.save(new UserProvider(user, signupInfo.provider(), signupInfo.socialId(), signupInfo.providerEmail()));
 
-        return OAuthLoginUser.from(user);
-    }
-
-    private OAuthLoginUser connectProviderAndReturn(User user, String socialId, String email) {
-        userProviderRepository.save(new UserProvider(user, GOOGLE, socialId, email));
-        return OAuthLoginUser.from(user);
+        return OAuthLoginUser.existing(signupInfo.provider(), signupInfo.socialId(), user);
     }
 
     private Role getRole(String roleId) {
@@ -111,20 +105,29 @@ public class GoogleOAuth2Service {
         return text;
     }
 
-    public record OAuthLoginUser(String email, String role, OAuthSignupInfoDto signupInfo) {
+    public record OAuthLoginUser(String provider, String socialId, String role, OAuthSignupInfoDto signupInfo) {
+        @Deprecated
+        public OAuthLoginUser(String socialId, String role, OAuthSignupInfoDto signupInfo) {
+            this(signupInfo == null ? "LEGACY" : signupInfo.provider(), socialId, role, signupInfo);
+        }
+
+        @Deprecated
+        public String email() {
+            return socialId;
+        }
         public static OAuthLoginUser signup(OAuthSignupInfoDto signupInfo) {
-            return new OAuthLoginUser(null, null, signupInfo);
+            return new OAuthLoginUser(signupInfo.provider(), signupInfo.socialId(), signupInfo.role(), signupInfo);
         }
 
         public boolean requiresSignup() {
             return signupInfo != null;
         }
 
-        private static OAuthLoginUser from(User user) {
+        private static OAuthLoginUser existing(String provider, String socialId, User user) {
             if (user.getRole() == null) {
                 throw new BaseException(OAUTH2_AUTH_FAILED);
             }
-            return new OAuthLoginUser(user.getEmail(), user.getRole().getRoleId(), null);
+            return new OAuthLoginUser(provider, socialId, user.getRole().getRoleId(), null);
         }
     }
 }

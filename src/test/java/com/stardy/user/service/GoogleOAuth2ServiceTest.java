@@ -52,7 +52,8 @@ class GoogleOAuth2ServiceTest {
 
         GoogleOAuth2Service.OAuthLoginUser result = googleOAuth2Service.login(Map.of("sub", "google-sub"));
 
-        assertThat(result.email()).isEqualTo("test@gmail.com");
+        assertThat(result.provider()).isEqualTo("GOOGLE");
+        assertThat(result.socialId()).isEqualTo("google-sub");
         assertThat(result.role()).isEqualTo("ROLE_USER");
         then(userRepository).shouldHaveNoInteractions();
     }
@@ -62,7 +63,6 @@ class GoogleOAuth2ServiceTest {
     void prepareSignupForNewGoogleUser() {
         given(userProviderRepository.findByProviderAndSocialId("GOOGLE", "google-sub"))
                 .willReturn(Optional.empty());
-        given(userRepository.findByEmail("new@gmail.com")).willReturn(Optional.empty());
         GoogleOAuth2Service.OAuthLoginUser result = googleOAuth2Service.login(Map.of(
                 "sub", "google-sub",
                 "email", "new@gmail.com",
@@ -74,8 +74,7 @@ class GoogleOAuth2ServiceTest {
         assertThat(result.signupInfo().email()).isEqualTo("new@gmail.com");
         assertThat(result.signupInfo().name()).isEqualTo("New User");
         assertThat(result.signupInfo().socialId()).isEqualTo("google-sub");
-        then(userRepository).should().findByEmail("new@gmail.com");
-        then(userRepository).shouldHaveNoMoreInteractions();
+        then(userRepository).shouldHaveNoInteractions();
         then(userProviderRepository).shouldHaveNoMoreInteractions();
     }
 
@@ -104,7 +103,8 @@ class GoogleOAuth2ServiceTest {
         assertThat(userCaptor.getValue().getDomain())
                 .isEqualTo(Map.of("regions", List.of("Seoul"), "subjects", List.of("Mathematics")));
         then(userProviderRepository).should().save(any(UserProvider.class));
-        assertThat(result.email()).isEqualTo("new@gmail.com");
+        assertThat(result.provider()).isEqualTo("GOOGLE");
+        assertThat(result.socialId()).isEqualTo("google-sub");
     }
 
     private User createUser(String email, String roleId) {
