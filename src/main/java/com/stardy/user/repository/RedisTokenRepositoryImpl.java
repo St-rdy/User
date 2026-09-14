@@ -5,13 +5,23 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stardy.user.dto.OAuthSignupInfoDto;
 import com.stardy.user.dto.TokenResponseDto;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 @Repository
 public class RedisTokenRepositoryImpl implements RedisTokenRepository {
+    private static final DefaultRedisScript<Long> ROTATE_REFRESH_TOKEN_SCRIPT = new DefaultRedisScript<>(
+            "local current = redis.call('GET', KEYS[1]); " +
+                    "if current ~= ARGV[1] then return 0 end; " +
+                    "redis.call('SET', KEYS[1], ARGV[2], 'PX', ARGV[3]); " +
+                    "return 1;",
+            Long.class
+    );
+
     private final RedisTemplate<String, String> redisTemplate;
     private final long refreshTokenExpiration;
     private final long temporaryCodeExpiration;
@@ -39,6 +49,18 @@ public class RedisTokenRepositoryImpl implements RedisTokenRepository {
 
     public void deleteRefreshToken(String email) {
         redisTemplate.delete(email);
+    }
+
+    @Override
+    public boolean rotateRefreshToken(String email, String oldRefreshToken, String newRefreshToken) {
+        Long result = redisTemplate.execute(
+                ROTATE_REFRESH_TOKEN_SCRIPT,
+                List.of(email),
+                oldRefreshToken,
+                newRefreshToken,
+                String.valueOf(refreshTokenExpiration)
+        );
+        return Long.valueOf(1L).equals(result);
     }
 
     @Override
