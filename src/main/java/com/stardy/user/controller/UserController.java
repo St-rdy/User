@@ -135,4 +135,14 @@ public class UserController {
                 .build();
     }
 
+    private ResponseCookie expireRefreshTokenCookie() {
+        return ResponseCookie.from(REFRESH_TOKEN_COOKIE_NAME, "")
+                .httpOnly(true)
+                .secure(true)
+                .sameSite("Strict")
+                .path(AUTH_COOKIE_PATH)
+                .maxAge(Duration.ZERO)
+                .build();
+    }
+
 }
