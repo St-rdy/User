@@ -50,9 +50,8 @@ public class UserController {
     public ResponseEntity<UserDto> getMyInfo(
             @RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false) String authorization
     ) {
-        String email = extractEmail(authorization);
-
-        return ResponseEntity.ok(userService.getUserInfo(email));
+        String token = extractToken(authorization);
+        return ResponseEntity.ok(userService.getUserInfo(jwtProvider.extractProvider(token), jwtProvider.extractSocialId(token)));
     }
 
     @GetMapping("/nickname/check")
@@ -74,7 +73,8 @@ public class UserController {
             @RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false) String authorization,
             @RequestBody NicknameUpdateRequestDto request
     ) {
-        userService.changeNickname(extractEmail(authorization), request.nickname());
+        String token = extractToken(authorization);
+        userService.changeNickname(jwtProvider.extractProvider(token), jwtProvider.extractSocialId(token), request.nickname());
         return ResponseEntity.ok(new MessageResponseDto("닉네임이 변경되었습니다."));
     }
 
@@ -83,7 +83,8 @@ public class UserController {
             @RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false) String authorization,
             @RequestBody ProfileImageUpdateRequestDto request
     ) {
-        userService.changeProfileImage(extractEmail(authorization), request.profileImageUrl());
+        String token = extractToken(authorization);
+        userService.changeProfileImage(jwtProvider.extractProvider(token), jwtProvider.extractSocialId(token), request.profileImageUrl());
         return ResponseEntity.ok(new MessageResponseDto("프로필 이미지가 변경되었습니다."));
     }
 
@@ -92,7 +93,8 @@ public class UserController {
             @RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false) String authorization,
             @RequestBody DomainUpdateRequestDto request
     ) {
-        userService.changeDomain(extractEmail(authorization), request.domain());
+        String token = extractToken(authorization);
+        userService.changeDomain(jwtProvider.extractProvider(token), jwtProvider.extractSocialId(token), request.domain());
         return ResponseEntity.ok(new MessageResponseDto("관심 지역 및 과목이 변경되었습니다."));
     }
 
@@ -100,15 +102,17 @@ public class UserController {
     public ResponseEntity<MessageResponseDto> deleteUser(
             @RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false) String authorization
     ) {
-        String email = extractEmail(authorization);
-        userService.deleteUser(email);
-        authService.logout(email);
+        String token = extractToken(authorization);
+        String provider = jwtProvider.extractProvider(token);
+        String socialId = jwtProvider.extractSocialId(token);
+        userService.deleteUser(provider, socialId);
+        authService.logout(provider, socialId);
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, expireRefreshTokenCookie().toString())
                 .body(new MessageResponseDto("회원 탈퇴가 완료되었습니다."));
     }
 
-    private String extractEmail(String authorization) {
+    private String extractToken(String authorization) {
         if (authorization == null || !authorization.startsWith(BEARER_PREFIX)) {
             throw new BaseException(UNAUTHORIZED);
         }
@@ -118,7 +122,17 @@ public class UserController {
             throw new BaseException(UNAUTHORIZED);
         }
 
-        return jwtProvider.extractEmail(token);
+        return token;
+    }
+
+    private ResponseCookie expireRefreshTokenCookie() {
+        return ResponseCookie.from(REFRESH_TOKEN_COOKIE_NAME, "")
+                .httpOnly(true)
+                .secure(true)
+                .sameSite("Strict")
+                .path(AUTH_COOKIE_PATH)
+                .maxAge(Duration.ZERO)
+                .build();
     }
 
     private ResponseCookie expireRefreshTokenCookie() {

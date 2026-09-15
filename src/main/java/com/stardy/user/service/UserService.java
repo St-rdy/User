@@ -52,11 +52,13 @@ public class UserService {
     }
 
     @Transactional(readOnly = true)
-    public UserDto getUserInfo(String email) {
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new BaseException(USER_NOT_FOUND));
+    public UserDto getUserInfo(String provider, String socialId) {
+        return UserDto.from(getUserByProvider(provider, socialId));
+    }
 
-        return UserDto.from(user);
+    @Deprecated
+    public UserDto getUserInfo(String email) {
+        return UserDto.from(userRepository.findByEmail(email).orElseThrow(() -> new BaseException(USER_NOT_FOUND)));
     }
 
     @Transactional(readOnly = true)
@@ -97,19 +99,31 @@ public class UserService {
     }
 
     @Transactional
-    public void changeNickname(String email, String nickname){
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new BaseException(USER_NOT_FOUND));
+    public void changeNickname(String provider, String socialId, String nickname){
+        User user = getUserByProvider(provider, socialId);
 
         checkNickname(nickname);
         user.changeNickname(nickname);
     }
 
-    @Transactional
-    public void changeDomain(String email, Map<String, Object> domain) {
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new BaseException(USER_NOT_FOUND));
+    @Deprecated
+    public void changeNickname(String email, String nickname) {
+        User user = userRepository.findByEmail(email).orElseThrow(() -> new BaseException(USER_NOT_FOUND));
+        checkNickname(nickname);
+        user.changeNickname(nickname);
+    }
 
+    @Transactional
+    public void changeDomain(String provider, String socialId, Map<String, Object> domain) {
+        User user = getUserByProvider(provider, socialId);
+
+        validateDomain(domain);
+        user.changeDomain(domain);
+    }
+
+    @Deprecated
+    public void changeDomain(String email, Map<String, Object> domain) {
+        User user = userRepository.findByEmail(email).orElseThrow(() -> new BaseException(USER_NOT_FOUND));
         validateDomain(domain);
         user.changeDomain(domain);
     }
@@ -119,12 +133,18 @@ public class UserService {
     }
 
     @Transactional
-    public void changeProfileImage(String email, String profileImageUrl) {
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new BaseException(USER_NOT_FOUND));
+    public void changeProfileImage(String provider, String socialId, String profileImageUrl) {
+        User user = getUserByProvider(provider, socialId);
 
         validateProfileImage(profileImageUrl);
 
+        user.changeProfileImage(profileImageUrl);
+    }
+
+    @Deprecated
+    public void changeProfileImage(String email, String profileImageUrl) {
+        User user = userRepository.findByEmail(email).orElseThrow(() -> new BaseException(USER_NOT_FOUND));
+        validateProfileImage(profileImageUrl);
         user.changeProfileImage(profileImageUrl);
     }
 
@@ -181,15 +201,29 @@ public class UserService {
     }
 
     @Transactional
-    public void deleteUser(String email) {
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new BaseException(USER_NOT_FOUND));
+    public void deleteUser(String provider, String socialId) {
+        User user = getUserByProvider(provider, socialId);
 
         if ("INACTIVE".equals(user.getStatus())) {
             throw new BaseException(USER_ALREADY_INACTIVE);
         }
 
         user.deleteUser();
+    }
+
+    @Deprecated
+    public void deleteUser(String email) {
+        User user = userRepository.findByEmail(email).orElseThrow(() -> new BaseException(USER_NOT_FOUND));
+        if ("INACTIVE".equals(user.getStatus())) {
+            throw new BaseException(USER_ALREADY_INACTIVE);
+        }
+        user.deleteUser();
+    }
+
+    private User getUserByProvider(String provider, String socialId) {
+        return userProviderRepository.findByProviderAndSocialId(provider, socialId)
+                .map(UserProvider::getUser)
+                .orElseThrow(() -> new BaseException(USER_NOT_FOUND));
     }
 
     @Transactional

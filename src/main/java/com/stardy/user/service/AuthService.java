@@ -2,11 +2,10 @@ package com.stardy.user.service;
 
 import com.stardy.user.dto.OAuthSignupInfoDto;
 import com.stardy.user.dto.TokenResponseDto;
-import com.stardy.user.entity.User;
 import com.stardy.user.exception.BaseException;
 import com.stardy.user.global.JwtProvider;
 import com.stardy.user.repository.RedisTokenRepository;
-import com.stardy.user.repository.UserRepository;
+import com.stardy.user.repository.UserProviderRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,14 +19,14 @@ public class AuthService {
 
     private final JwtProvider jwtProvider;
     private final RedisTokenRepository redisTokenRepository;
-    private final UserRepository userRepository;
+    private final UserProviderRepository userProviderRepository;
     private final GoogleOAuth2Service googleOAuth2Service;
 
-    public AuthService(JwtProvider jwtProvider, RedisTokenRepository redisTokenRepository, UserRepository userRepository,
+    public AuthService(JwtProvider jwtProvider, RedisTokenRepository redisTokenRepository, UserProviderRepository userProviderRepository,
                        GoogleOAuth2Service googleOAuth2Service) {
         this.jwtProvider = jwtProvider;
         this.redisTokenRepository = redisTokenRepository;
-        this.userRepository = userRepository;
+        this.userProviderRepository = userProviderRepository;
         this.googleOAuth2Service = googleOAuth2Service;
     }
 
@@ -37,16 +36,18 @@ public class AuthService {
             throw new BaseException(INVALID_TOKEN);
         }
 
-        String email = jwtProvider.extractEmail(refreshToken);
-        String role = userRepository.findByEmail(email)
-                .map(User::getRole)
+        String socialId = jwtProvider.extractSocialId(refreshToken);
+        String provider = jwtProvider.extractProvider(refreshToken);
+        String identity = identity(provider, socialId);
+        String role = userProviderRepository.findByProviderAndSocialId(provider, socialId)
+                .map(userProvider -> userProvider.getUser().getRole())
                 .map(userRole -> userRole.getRoleId())
-                .orElseGet(() -> getPendingSignupRole(email));
+                .orElseGet(() -> getPendingSignupRole(identity));
 
-        String newAccessToken = jwtProvider.createAccessToken(email, role);
-        String newRefreshToken = jwtProvider.createRefreshToken(email);
+        String newAccessToken = jwtProvider.createAccessToken(socialId, provider, role);
+        String newRefreshToken = jwtProvider.createRefreshToken(socialId, provider);
 
-        if (!redisTokenRepository.rotateRefreshToken(email, refreshToken, newRefreshToken)) {
+        if (!redisTokenRepository.rotateRefreshToken(identity, refreshToken, newRefreshToken)) {
             throw new BaseException(INVALID_TOKEN);
         }
 
@@ -57,34 +58,45 @@ public class AuthService {
      * OAuth2 로그인 성공 후 JWT를 바로 주지 않고 임시 코드(UUID)로 교환해서 반환.
      * 프론트가 URL에서 이 코드를 꺼내 재요청하면 exchangeTemporaryCode()에서 JWT를 발급.
      */
-    public String issueTemporaryCode(String email, String role) {
-        return issueTemporaryCode(email, role, null);
+    public String issueTemporaryCode(String provider, String socialId, String role) {
+        return issueTemporaryCode(provider, socialId, role, null);
     }
 
-    public String issueTemporaryCode(String email, String role, OAuthSignupInfoDto signupInfo) {
+    @Deprecated
+    public String issueTemporaryCode(String socialId, String role) {
+        return issueTemporaryCode("LEGACY", socialId, role);
+    }
+
+    @Deprecated
+    public String issueTemporaryCode(String socialId, String role, OAuthSignupInfoDto signupInfo) {
+        return issueTemporaryCode(signupInfo.provider(), signupInfo.socialId(), role, signupInfo);
+    }
+
+    public String issueTemporaryCode(String provider, String socialId, String role, OAuthSignupInfoDto signupInfo) {
         // JWT를 먼저 만들어서
-        String accessToken = jwtProvider.createAccessToken(email, role);
-        String refreshToken = jwtProvider.createRefreshToken(email);
+        String accessToken = jwtProvider.createAccessToken(socialId, provider, role);
+        String refreshToken = jwtProvider.createRefreshToken(socialId, provider);
 
         // UUID를 키로 Redis에 잠깐 저장 — TTL은 RedisTokenRepositoryImpl에서 관리
         String tempCode = UUID.randomUUID().toString();
         redisTokenRepository.saveTemporaryCode(tempCode, new TokenResponseDto(accessToken, refreshToken));
         if (signupInfo != null) {
-            redisTokenRepository.saveOAuthSignupInfo(email, signupInfo);
+            redisTokenRepository.saveOAuthSignupInfo(identity(provider, socialId), signupInfo);
         }
 
         // 프론트에게는 UUID만 전달
         return tempCode;
     }
 
-    public void completeSignup(String email, String nickname, String profileImageUrl, Map<String, Object> domain) {
-        OAuthSignupInfoDto signupInfo = redisTokenRepository.getOAuthSignupInfo(email);
+    public void completeSignup(String provider, String socialId, String nickname, String profileImageUrl, Map<String, Object> domain) {
+        String identity = identity(provider, socialId);
+        OAuthSignupInfoDto signupInfo = redisTokenRepository.getOAuthSignupInfo(identity);
         if (signupInfo == null) {
             throw new BaseException(INVALID_TEMP_CODE);
         }
 
         googleOAuth2Service.completeSignup(signupInfo, nickname, profileImageUrl, domain);
-        redisTokenRepository.deleteOAuthSignupInfo(email);
+        redisTokenRepository.deleteOAuthSignupInfo(identity);
     }
 
     /**
@@ -98,8 +110,9 @@ public class AuthService {
             throw new BaseException(INVALID_TEMP_CODE);
         }
 
-        String email = jwtProvider.extractEmail(tokens.getAccessToken());
-        redisTokenRepository.saveRefreshToken(email, tokens.getRefreshToken());
+        String socialId = jwtProvider.extractSocialId(tokens.getAccessToken());
+        String provider = jwtProvider.extractProvider(tokens.getAccessToken());
+        redisTokenRepository.saveRefreshToken(identity(provider, socialId), tokens.getRefreshToken());
 
         // 사용 즉시 삭제 — 일회성 보장
         redisTokenRepository.deleteTemporaryCode(tempCode);
@@ -107,15 +120,27 @@ public class AuthService {
         return tokens;
     }
 
-    public void logout(String email){
-        redisTokenRepository.deleteRefreshToken(email);
+    public void logout(String provider, String socialId){
+        redisTokenRepository.deleteRefreshToken(identity(provider, socialId));
     }
 
-    private String getPendingSignupRole(String email) {
-        OAuthSignupInfoDto signupInfo = redisTokenRepository.getOAuthSignupInfo(email);
+    @Deprecated
+    public void logout(String socialId) {
+        logout("LEGACY", socialId);
+    }
+
+    private String getPendingSignupRole(String identity) {
+        OAuthSignupInfoDto signupInfo = redisTokenRepository.getOAuthSignupInfo(identity);
         if (signupInfo == null) {
             throw new BaseException(INVALID_TOKEN);
         }
         return signupInfo.role();
+    }
+
+    private String identity(String provider, String socialId) {
+        if (provider == null || provider.isBlank() || socialId == null || socialId.isBlank()) {
+            throw new BaseException(INVALID_TOKEN);
+        }
+        return provider + ":" + socialId;
     }
 }
