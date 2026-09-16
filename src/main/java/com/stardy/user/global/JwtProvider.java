@@ -61,22 +61,6 @@ public class JwtProvider {
         return parseClaims(token).get("provider", String.class);
     }
 
-    // 기존 호출부의 컴파일 호환용 별칭입니다. 이메일이 아니라 JWT subject를 반환합니다.
-    @Deprecated
-    public String extractEmail(String token) {
-        return extractSocialId(token);
-    }
-
-    @Deprecated
-    public String createAccessToken(String socialId, String role) {
-        return createAccessToken(socialId, "LEGACY", role);
-    }
-
-    @Deprecated
-    public String createRefreshToken(String socialId) {
-        return createRefreshToken(socialId, "LEGACY");
-    }
-
     // 토큰 유효성 검사
     public boolean isTokenValid(String token) {
         try {

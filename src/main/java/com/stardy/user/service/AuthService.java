@@ -62,16 +62,6 @@ public class AuthService {
         return issueTemporaryCode(provider, socialId, role, null);
     }
 
-    @Deprecated
-    public String issueTemporaryCode(String socialId, String role) {
-        return issueTemporaryCode("LEGACY", socialId, role);
-    }
-
-    @Deprecated
-    public String issueTemporaryCode(String socialId, String role, OAuthSignupInfoDto signupInfo) {
-        return issueTemporaryCode(signupInfo.provider(), signupInfo.socialId(), role, signupInfo);
-    }
-
     public String issueTemporaryCode(String provider, String socialId, String role, OAuthSignupInfoDto signupInfo) {
         // JWT를 먼저 만들어서
         String accessToken = jwtProvider.createAccessToken(socialId, provider, role);
@@ -122,11 +112,6 @@ public class AuthService {
 
     public void logout(String provider, String socialId){
         redisTokenRepository.deleteRefreshToken(identity(provider, socialId));
-    }
-
-    @Deprecated
-    public void logout(String socialId) {
-        logout("LEGACY", socialId);
     }
 
     private String getPendingSignupRole(String identity) {

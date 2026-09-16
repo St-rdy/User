@@ -106,15 +106,6 @@ public class GoogleOAuth2Service {
     }
 
     public record OAuthLoginUser(String provider, String socialId, String role, OAuthSignupInfoDto signupInfo) {
-        @Deprecated
-        public OAuthLoginUser(String socialId, String role, OAuthSignupInfoDto signupInfo) {
-            this(signupInfo == null ? "LEGACY" : signupInfo.provider(), socialId, role, signupInfo);
-        }
-
-        @Deprecated
-        public String email() {
-            return socialId;
-        }
         public static OAuthLoginUser signup(OAuthSignupInfoDto signupInfo) {
             return new OAuthLoginUser(signupInfo.provider(), signupInfo.socialId(), signupInfo.role(), signupInfo);
         }

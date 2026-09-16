@@ -4,11 +4,13 @@ import com.stardy.user.dto.OAuthSignupInfoDto;
 import com.stardy.user.dto.TokenResponseDto;
 import com.stardy.user.entity.Role;
 import com.stardy.user.entity.User;
+import com.stardy.user.entity.UserProvider;
 import com.stardy.user.exception.BaseException;
 import com.stardy.user.exception.ErrorCode;
 import com.stardy.user.global.JwtProvider;
 import com.stardy.user.repository.RedisTokenRepository;
 import com.stardy.user.repository.UserRepository;
+import com.stardy.user.repository.UserProviderRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -52,6 +54,9 @@ class AuthServiceTest {
     private UserRepository userRepository;
 
     @Mock
+    private UserProviderRepository userProviderRepository;
+
+    @Mock
     private GoogleOAuth2Service googleOAuth2Service;
 
     @Test
@@ -59,19 +64,20 @@ class AuthServiceTest {
     void reissueTokens() {
         // given
         String oldRefreshToken = "old-refresh-token";
-        String email = "test@gmail.com";
+        String socialId = "google-sub";
+        String provider = "GOOGLE";
         String newAccessToken = "new-access-token";
         String newRefreshToken = "new-refresh-token";
         String role = "ROLE_USER";
 
         given(jwtProvider.isTokenValid(oldRefreshToken)).willReturn(true);
-        given(jwtProvider.extractEmail(oldRefreshToken)).willReturn(email);
-
-        given(userRepository.findByEmail(email)).willReturn(Optional.of(createUserWithRole(email, role)));
-
-        given(jwtProvider.createAccessToken(eq(email), eq(role))).willReturn(newAccessToken);
-        given(jwtProvider.createRefreshToken(email)).willReturn(newRefreshToken);
-        given(redisTokenRepository.rotateRefreshToken(email, oldRefreshToken, newRefreshToken)).willReturn(true);
+        given(jwtProvider.extractSocialId(oldRefreshToken)).willReturn(socialId);
+        given(jwtProvider.extractProvider(oldRefreshToken)).willReturn(provider);
+        given(userProviderRepository.findByProviderAndSocialId(provider, socialId))
+                .willReturn(Optional.of(new UserProvider(createUserWithRole("test@gmail.com", role), provider, socialId, "test@gmail.com")));
+        given(jwtProvider.createAccessToken(eq(socialId), eq(provider), eq(role))).willReturn(newAccessToken);
+        given(jwtProvider.createRefreshToken(socialId, provider)).willReturn(newRefreshToken);
+        given(redisTokenRepository.rotateRefreshToken(provider + ":" + socialId, oldRefreshToken, newRefreshToken)).willReturn(true);
 
         // when
         TokenResponseDto result = authService.reissueToken(oldRefreshToken);
@@ -79,7 +85,7 @@ class AuthServiceTest {
         // then
         assertThat(result.getAccessToken()).isEqualTo(newAccessToken);
         assertThat(result.getRefreshToken()).isEqualTo(newRefreshToken);
-        then(redisTokenRepository).should().rotateRefreshToken(email, oldRefreshToken, newRefreshToken);
+        then(redisTokenRepository).should().rotateRefreshToken(provider + ":" + socialId, oldRefreshToken, newRefreshToken);
     }
 
     @Test
@@ -101,16 +107,19 @@ class AuthServiceTest {
     void reissueWithStolenToken() {
         // given
         String stolenToken = "stolen-token";
-        String email = "test@gmail.com";
+        String socialId = "google-sub";
+        String provider = "GOOGLE";
         String newAccessToken = "new-access-token";
         String newRefreshToken = "new-refresh-token";
 
         given(jwtProvider.isTokenValid(stolenToken)).willReturn(true);
-        given(jwtProvider.extractEmail(stolenToken)).willReturn(email);
-        given(userRepository.findByEmail(email)).willReturn(Optional.of(createUserWithRole(email, "ROLE_USER")));
-        given(jwtProvider.createAccessToken(email, "ROLE_USER")).willReturn(newAccessToken);
-        given(jwtProvider.createRefreshToken(email)).willReturn(newRefreshToken);
-        given(redisTokenRepository.rotateRefreshToken(email, stolenToken, newRefreshToken)).willReturn(false);
+        given(jwtProvider.extractSocialId(stolenToken)).willReturn(socialId);
+        given(jwtProvider.extractProvider(stolenToken)).willReturn(provider);
+        given(userProviderRepository.findByProviderAndSocialId(provider, socialId))
+                .willReturn(Optional.of(new UserProvider(createUserWithRole("test@gmail.com", "ROLE_USER"), provider, socialId, "test@gmail.com")));
+        given(jwtProvider.createAccessToken(socialId, provider, "ROLE_USER")).willReturn(newAccessToken);
+        given(jwtProvider.createRefreshToken(socialId, provider)).willReturn(newRefreshToken);
+        given(redisTokenRepository.rotateRefreshToken(provider + ":" + socialId, stolenToken, newRefreshToken)).willReturn(false);
 
         // when
         BaseException exception = assertThrows(BaseException.class, () -> authService.reissueToken(stolenToken));
@@ -124,14 +133,17 @@ class AuthServiceTest {
     void reissueWithNoStoredToken() {
         // given
         String refreshToken = "refresh-token";
-        String email = "test@gmail.com";
+        String socialId = "google-sub";
+        String provider = "GOOGLE";
 
         given(jwtProvider.isTokenValid(refreshToken)).willReturn(true);
-        given(jwtProvider.extractEmail(refreshToken)).willReturn(email);
-        given(userRepository.findByEmail(email)).willReturn(Optional.of(createUserWithRole(email, "ROLE_USER")));
-        given(jwtProvider.createAccessToken(email, "ROLE_USER")).willReturn("new-access-token");
-        given(jwtProvider.createRefreshToken(email)).willReturn("new-refresh-token");
-        given(redisTokenRepository.rotateRefreshToken(email, refreshToken, "new-refresh-token")).willReturn(false);
+        given(jwtProvider.extractSocialId(refreshToken)).willReturn(socialId);
+        given(jwtProvider.extractProvider(refreshToken)).willReturn(provider);
+        given(userProviderRepository.findByProviderAndSocialId(provider, socialId))
+                .willReturn(Optional.of(new UserProvider(createUserWithRole("test@gmail.com", "ROLE_USER"), provider, socialId, "test@gmail.com")));
+        given(jwtProvider.createAccessToken(socialId, provider, "ROLE_USER")).willReturn("new-access-token");
+        given(jwtProvider.createRefreshToken(socialId, provider)).willReturn("new-refresh-token");
+        given(redisTokenRepository.rotateRefreshToken(provider + ":" + socialId, refreshToken, "new-refresh-token")).willReturn(false);
 
         // when
         BaseException exception = assertThrows(BaseException.class, () -> authService.reissueToken(refreshToken));
@@ -144,54 +156,57 @@ class AuthServiceTest {
     @DisplayName("가입 대기 사용자도 Refresh Token을 재발급한다.")
     void reissueWithPendingSignupUser() {
         String refreshToken = "refresh-token";
-        String email = "test@gmail.com";
+        String socialId = "google-sub";
+        String provider = "GOOGLE";
         OAuthSignupInfoDto signupInfo = new OAuthSignupInfoDto(
-                email, "Test User", "ROLE_USER", "GOOGLE", "google-sub", email
+                "test@gmail.com", "Test User", "ROLE_USER", provider, socialId, "test@gmail.com"
         );
 
         given(jwtProvider.isTokenValid(refreshToken)).willReturn(true);
-        given(jwtProvider.extractEmail(refreshToken)).willReturn(email);
-        given(userRepository.findByEmail(email)).willReturn(Optional.empty());
-        given(redisTokenRepository.getOAuthSignupInfo(email)).willReturn(signupInfo);
-        given(jwtProvider.createAccessToken(email, "ROLE_USER")).willReturn("new-access-token");
-        given(jwtProvider.createRefreshToken(email)).willReturn("new-refresh-token");
-        given(redisTokenRepository.rotateRefreshToken(email, refreshToken, "new-refresh-token")).willReturn(true);
+        given(jwtProvider.extractSocialId(refreshToken)).willReturn(socialId);
+        given(jwtProvider.extractProvider(refreshToken)).willReturn(provider);
+        given(userProviderRepository.findByProviderAndSocialId(provider, socialId)).willReturn(Optional.empty());
+        given(redisTokenRepository.getOAuthSignupInfo(provider + ":" + socialId)).willReturn(signupInfo);
+        given(jwtProvider.createAccessToken(socialId, provider, "ROLE_USER")).willReturn("new-access-token");
+        given(jwtProvider.createRefreshToken(socialId, provider)).willReturn("new-refresh-token");
+        given(redisTokenRepository.rotateRefreshToken(provider + ":" + socialId, refreshToken, "new-refresh-token")).willReturn(true);
 
         TokenResponseDto result = authService.reissueToken(refreshToken);
 
         assertThat(result.getAccessToken()).isEqualTo("new-access-token");
         assertThat(result.getRefreshToken()).isEqualTo("new-refresh-token");
-        then(redisTokenRepository).should().rotateRefreshToken(email, refreshToken, "new-refresh-token");
+        then(redisTokenRepository).should().rotateRefreshToken(provider + ":" + socialId, refreshToken, "new-refresh-token");
     }
 
     @Test
     @DisplayName("로그아웃 시 Redis에서 RefreshToken을 삭제한다.")
     void logout() {
         // given
-        String email = "test@gmail.com";
+        String socialId = "google-sub";
 
         // when
-        authService.logout(email);
+        authService.logout("GOOGLE", socialId);
 
         // then
-        then(redisTokenRepository).should().deleteRefreshToken(email);
+        then(redisTokenRepository).should().deleteRefreshToken("GOOGLE:" + socialId);
     }
 
     @Test
     @DisplayName("OAuth2 로그인 성공 시 임시 코드(UUID)를 발급하고 Redis에 저장한다.")
     void issueTemporaryCode() {
         // given
-        String email = "test@gmail.com";
+        String socialId = "google-sub";
+        String provider = "GOOGLE";
         String role = "ROLE_USER";
         String fakeAccessToken = "fake-access-token";
         String fakeRefreshToken = "fake-refresh-token";
 
         // JWT 발급은 JwtProvider가 담당 — Mock으로 가짜 토큰 반환
-        given(jwtProvider.createAccessToken(eq(email), eq(role))).willReturn(fakeAccessToken);
-        given(jwtProvider.createRefreshToken(email)).willReturn(fakeRefreshToken);
+        given(jwtProvider.createAccessToken(eq(socialId), eq(provider), eq(role))).willReturn(fakeAccessToken);
+        given(jwtProvider.createRefreshToken(socialId, provider)).willReturn(fakeRefreshToken);
 
         // when
-        String tempCode = authService.issueTemporaryCode(email, role);
+        String tempCode = authService.issueTemporaryCode(provider, socialId, role);
 
         // then
         // UUID 형식인지 검증
@@ -212,7 +227,8 @@ class AuthServiceTest {
 
         // Redis에서 임시 코드를 조회하면 TokenResponse를 반환하도록 설정
         given(redisTokenRepository.getTemporaryCode(tempCode)).willReturn(expectedTokens);
-        given(jwtProvider.extractEmail("access-token")).willReturn("test@gmail.com");
+        given(jwtProvider.extractSocialId("access-token")).willReturn("google-sub");
+        given(jwtProvider.extractProvider("access-token")).willReturn("GOOGLE");
 
         // when
         TokenResponseDto result = authService.exchangeTemporaryCode(tempCode);
@@ -220,7 +236,7 @@ class AuthServiceTest {
         // then
         assertThat(result.getAccessToken()).isEqualTo("access-token");
         assertThat(result.getRefreshToken()).isEqualTo("refresh-token");
-        then(redisTokenRepository).should().saveRefreshToken("test@gmail.com", "refresh-token");
+        then(redisTokenRepository).should().saveRefreshToken("GOOGLE:google-sub", "refresh-token");
         // 일회성 코드이므로 사용 즉시 삭제됐는지 검증
         then(redisTokenRepository).should().deleteTemporaryCode(tempCode);
     }

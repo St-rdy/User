@@ -30,6 +30,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ExtendWith(MockitoExtension.class)
 class UserControllerTest {
 
+    private static final String PROVIDER = "GOOGLE";
+    private static final String SOCIAL_ID = "google-sub";
+
     private MockMvc mockMvc;
 
     @Mock
@@ -67,8 +70,9 @@ class UserControllerTest {
         );
 
         given(jwtProvider.isTokenValid(accessToken)).willReturn(true);
-        given(jwtProvider.extractEmail(accessToken)).willReturn(email);
-        given(userService.getUserInfo(email)).willReturn(user);
+        given(jwtProvider.extractProvider(accessToken)).willReturn(PROVIDER);
+        given(jwtProvider.extractSocialId(accessToken)).willReturn(SOCIAL_ID);
+        given(userService.getUserInfo(PROVIDER, SOCIAL_ID)).willReturn(user);
 
         mockMvc.perform(get("/api/v1/users/me")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
@@ -119,7 +123,8 @@ class UserControllerTest {
     void changeNickname() throws Exception {
         String accessToken = "access-token";
         given(jwtProvider.isTokenValid(accessToken)).willReturn(true);
-        given(jwtProvider.extractEmail(accessToken)).willReturn("test@gmail.com");
+        given(jwtProvider.extractProvider(accessToken)).willReturn(PROVIDER);
+        given(jwtProvider.extractSocialId(accessToken)).willReturn(SOCIAL_ID);
 
         mockMvc.perform(patch("/api/v1/users/me/nickname")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
@@ -128,7 +133,7 @@ class UserControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("닉네임이 변경되었습니다."));
 
-        then(userService).should().changeNickname("test@gmail.com", "new-nickname");
+        then(userService).should().changeNickname(PROVIDER, SOCIAL_ID, "new-nickname");
     }
 
     @Test
@@ -136,7 +141,8 @@ class UserControllerTest {
     void changeProfileImage() throws Exception {
         String accessToken = "access-token";
         given(jwtProvider.isTokenValid(accessToken)).willReturn(true);
-        given(jwtProvider.extractEmail(accessToken)).willReturn("test@gmail.com");
+        given(jwtProvider.extractProvider(accessToken)).willReturn(PROVIDER);
+        given(jwtProvider.extractSocialId(accessToken)).willReturn(SOCIAL_ID);
 
         mockMvc.perform(patch("/api/v1/users/me/profile-image")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
@@ -145,7 +151,7 @@ class UserControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("프로필 이미지가 변경되었습니다."));
 
-        then(userService).should().changeProfileImage("test@gmail.com", "https://example.com/new.png");
+        then(userService).should().changeProfileImage(PROVIDER, SOCIAL_ID, "https://example.com/new.png");
     }
 
     @Test
@@ -153,7 +159,8 @@ class UserControllerTest {
     void changeDomain() throws Exception {
         String accessToken = "access-token";
         given(jwtProvider.isTokenValid(accessToken)).willReturn(true);
-        given(jwtProvider.extractEmail(accessToken)).willReturn("test@gmail.com");
+        given(jwtProvider.extractProvider(accessToken)).willReturn(PROVIDER);
+        given(jwtProvider.extractSocialId(accessToken)).willReturn(SOCIAL_ID);
 
         mockMvc.perform(patch("/api/v1/users/me/domain")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
@@ -163,7 +170,7 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.message").value("관심 지역 및 과목이 변경되었습니다."));
 
         then(userService).should().changeDomain(
-                "test@gmail.com", Map.of("regions", List.of("Seoul"), "subjects", List.of("Mathematics"))
+                PROVIDER, SOCIAL_ID, Map.of("regions", List.of("Seoul"), "subjects", List.of("Mathematics"))
         );
     }
 
@@ -172,7 +179,8 @@ class UserControllerTest {
     void deleteUser() throws Exception {
         String accessToken = "access-token";
         given(jwtProvider.isTokenValid(accessToken)).willReturn(true);
-        given(jwtProvider.extractEmail(accessToken)).willReturn("test@gmail.com");
+        given(jwtProvider.extractProvider(accessToken)).willReturn(PROVIDER);
+        given(jwtProvider.extractSocialId(accessToken)).willReturn(SOCIAL_ID);
 
         mockMvc.perform(delete("/api/v1/users/me")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
@@ -181,7 +189,7 @@ class UserControllerTest {
                 .andExpect(header().string(HttpHeaders.SET_COOKIE, org.hamcrest.Matchers.containsString("Max-Age=0")))
                 .andExpect(jsonPath("$.message").value("회원 탈퇴가 완료되었습니다."));
 
-        then(userService).should().deleteUser("test@gmail.com");
-        then(authService).should().logout("test@gmail.com");
+        then(userService).should().deleteUser(PROVIDER, SOCIAL_ID);
+        then(authService).should().logout(PROVIDER, SOCIAL_ID);
     }
 }

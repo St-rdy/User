@@ -4,12 +4,14 @@ import com.stardy.user.config.TestContainersConfig;
 import com.stardy.user.dto.TokenResponseDto;
 import com.stardy.user.entity.Role;
 import com.stardy.user.entity.User;
+import com.stardy.user.entity.UserProvider;
 import com.stardy.user.exception.BaseException;
 import com.stardy.user.exception.ErrorCode;
 import com.stardy.user.global.JwtProvider;
 import com.stardy.user.repository.RedisTokenRepository;
 import com.stardy.user.repository.RoleRepository;
 import com.stardy.user.repository.UserRepository;
+import com.stardy.user.repository.UserProviderRepository;
 import com.stardy.user.service.AuthService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -35,6 +37,8 @@ public class AuthIntegrationTest {
     @Autowired
     private UserRepository userRepository;
     @Autowired
+    private UserProviderRepository userProviderRepository;
+    @Autowired
     private RedisTokenRepository redisTokenRepository;
     @Autowired
     private RoleRepository roleRepository;
@@ -50,12 +54,13 @@ public class AuthIntegrationTest {
     void reissueTokens() {
         //1. 로그인 되어 있는 상황을 만들기 위함, reissueToken 에서 UserDB를 조회하기 때문에 DB 저장 로직 추가
         String email = "test@gmail.com";
+        String socialId = "google-reissue";
         String role = "ROLE_USER";
         String nickName = "NN_reissueTokens";
-        userRepository.save(createUserWithRole(email, role, nickName));
+        saveUserProvider(email, role, nickName, socialId);
 
-        String oldRefreshToken = jwtProvider.createRefreshToken(email);
-        redisTokenRepository.saveRefreshToken(email, oldRefreshToken);
+        String oldRefreshToken = jwtProvider.createRefreshToken(socialId, "GOOGLE");
+        redisTokenRepository.saveRefreshToken("GOOGLE:" + socialId, oldRefreshToken);
 
         //2. 재발급 로직
         TokenResponseDto result = authService.reissueToken(oldRefreshToken);
@@ -81,11 +86,12 @@ public class AuthIntegrationTest {
     void reissueWithStolenToken() {
         //1. 로그인 되어 있는 상황을 만들기 위함, reissueToken 에서 UserDB를 조회하기 때문에 DB 저장 로직 추가
         String email = "test@gmail.com";
+        String socialId = "google-stolen";
         String role = "ROLE_USER";
         String nickName = "NN_reissueWithStolenToken";
-        String firstRefreshToken = jwtProvider.createRefreshToken(email);
-        redisTokenRepository.saveRefreshToken(email, firstRefreshToken);
-        userRepository.save(createUserWithRole(email, role, nickName));
+        String firstRefreshToken = jwtProvider.createRefreshToken(socialId, "GOOGLE");
+        redisTokenRepository.saveRefreshToken("GOOGLE:" + socialId, firstRefreshToken);
+        saveUserProvider(email, role, nickName, socialId);
 
         //2. RTR 방식으로 RT 재발급 (사용자가 정상적으로 변경)
         authService.reissueToken(firstRefreshToken);
@@ -100,8 +106,8 @@ public class AuthIntegrationTest {
     @DisplayName("Redis에 저장된 RefreshToken이 없으면 예외를 던진다.")
     void reissueWithNoStoredToken() {
         //1. 로그인 되어 있는 상황을 만들기 위함. 하지만 Redis 에 저장하지 않음
-        String email = "test@gmail.com";
-        String refreshToken = jwtProvider.createRefreshToken(email);
+        String socialId = "google-no-stored";
+        String refreshToken = jwtProvider.createRefreshToken(socialId, "GOOGLE");
 
         //2. refreshToken이 redis에 저장되있지 않기 때문에 예외 발생
         BaseException exception = assertThrows(BaseException.class, () -> authService.reissueToken(refreshToken));
@@ -113,15 +119,15 @@ public class AuthIntegrationTest {
     @DisplayName("로그아웃 시 Redis에서 RefreshToken을 삭제한다.")
     void logout() {
         // 1. 로그인 되어 있는 상황을 만들기 위함.
-        String email = "test@gmail.com";
-        String refreshToken = jwtProvider.createRefreshToken(email);
-        redisTokenRepository.saveRefreshToken(email, refreshToken);
+        String socialId = "google-logout";
+        String refreshToken = jwtProvider.createRefreshToken(socialId, "GOOGLE");
+        redisTokenRepository.saveRefreshToken("GOOGLE:" + socialId, refreshToken);
 
         // 2. 로그아웃 기능
-        authService.logout(email);
+        authService.logout("GOOGLE", socialId);
 
         //3. Redis에서 Email을 가지고 검증하면 null 이어야 함.
-        assertThat(redisTokenRepository.getRefreshToken(email)).isNull();
+        assertThat(redisTokenRepository.getRefreshToken("GOOGLE:" + socialId)).isNull();
     }
 
     private User createUserWithRole(String email, String roleName, String nickName) {
@@ -140,6 +146,11 @@ public class AuthIntegrationTest {
                 "ACTIVE"
         );
         return user;
+    }
+
+    private void saveUserProvider(String email, String role, String nickname, String socialId) {
+        User user = userRepository.save(createUserWithRole(email, role, nickname));
+        userProviderRepository.save(new UserProvider(user, "GOOGLE", socialId, email));
     }
 
     private String roleDisplayName(String roleId) {

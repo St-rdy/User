@@ -40,13 +40,13 @@ class JwtAuthenticationFilterTest {
         request.addHeader(HttpHeaders.AUTHORIZATION, "Bearer access-token");
 
         given(jwtProvider.isTokenValid("access-token")).willReturn(true);
-        given(jwtProvider.extractEmail("access-token")).willReturn("test@gmail.com");
+        given(jwtProvider.extractSocialId("access-token")).willReturn("google-sub");
         given(jwtProvider.extractRole("access-token")).willReturn("ROLE_USER");
 
         filter.doFilter(request, response, filterChain);
 
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
-        assertThat(SecurityContextHolder.getContext().getAuthentication().getName()).isEqualTo("test@gmail.com");
+        assertThat(SecurityContextHolder.getContext().getAuthentication().getName()).isEqualTo("google-sub");
         assertThat(SecurityContextHolder.getContext().getAuthentication().getAuthorities())
                 .extracting("authority")
                 .containsExactly("ROLE_USER");
