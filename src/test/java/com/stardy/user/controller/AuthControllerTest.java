@@ -98,7 +98,7 @@ class AuthControllerTest {
     @DisplayName("가입 정보를 완료하면 토큰 교환용 임시 코드를 반환한다.")
     void completeSignup() throws Exception {
         String accessToken = "access-token";
-        given(jwtProvider.isTokenValid(accessToken)).willReturn(true);
+        given(jwtProvider.isAccessTokenValid(accessToken)).willReturn(true);
         given(jwtProvider.extractProvider(accessToken)).willReturn("GOOGLE");
         given(jwtProvider.extractSocialId(accessToken)).willReturn("google-sub");
 
@@ -137,7 +137,7 @@ class AuthControllerTest {
     @DisplayName("유효한 Access Token으로 로그아웃하고 Refresh Token Cookie를 만료한다.")
     void logout() throws Exception {
         String accessToken = "access-token";
-        given(jwtProvider.isTokenValid(accessToken)).willReturn(true);
+        given(jwtProvider.isAccessTokenValid(accessToken)).willReturn(true);
         given(jwtProvider.extractProvider(accessToken)).willReturn("GOOGLE");
         given(jwtProvider.extractSocialId(accessToken)).willReturn("google-sub");
 

@@ -22,8 +22,7 @@ public class AuthService {
     private final UserProviderRepository userProviderRepository;
     private final GoogleOAuth2Service googleOAuth2Service;
 
-    public AuthService(JwtProvider jwtProvider, RedisTokenRepository redisTokenRepository, UserProviderRepository userProviderRepository,
-                       GoogleOAuth2Service googleOAuth2Service) {
+    public AuthService(JwtProvider jwtProvider, RedisTokenRepository redisTokenRepository, UserProviderRepository userProviderRepository, GoogleOAuth2Service googleOAuth2Service) {
         this.jwtProvider = jwtProvider;
         this.redisTokenRepository = redisTokenRepository;
         this.userProviderRepository = userProviderRepository;
@@ -32,7 +31,7 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public TokenResponseDto reissueToken(String refreshToken){
-        if(!jwtProvider.isTokenValid(refreshToken)){
+        if(!jwtProvider.isRefreshTokenValid(refreshToken)){
             throw new BaseException(INVALID_TOKEN);
         }
 

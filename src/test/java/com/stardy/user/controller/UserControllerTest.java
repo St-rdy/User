@@ -69,7 +69,7 @@ class UserControllerTest {
                 "ROLE_USER"
         );
 
-        given(jwtProvider.isTokenValid(accessToken)).willReturn(true);
+        given(jwtProvider.isAccessTokenValid(accessToken)).willReturn(true);
         given(jwtProvider.extractProvider(accessToken)).willReturn(PROVIDER);
         given(jwtProvider.extractSocialId(accessToken)).willReturn(SOCIAL_ID);
         given(userService.getUserInfo(PROVIDER, SOCIAL_ID)).willReturn(user);
@@ -122,7 +122,7 @@ class UserControllerTest {
     @DisplayName("내 닉네임을 변경한다.")
     void changeNickname() throws Exception {
         String accessToken = "access-token";
-        given(jwtProvider.isTokenValid(accessToken)).willReturn(true);
+        given(jwtProvider.isAccessTokenValid(accessToken)).willReturn(true);
         given(jwtProvider.extractProvider(accessToken)).willReturn(PROVIDER);
         given(jwtProvider.extractSocialId(accessToken)).willReturn(SOCIAL_ID);
 
@@ -140,7 +140,7 @@ class UserControllerTest {
     @DisplayName("내 프로필 이미지를 변경한다.")
     void changeProfileImage() throws Exception {
         String accessToken = "access-token";
-        given(jwtProvider.isTokenValid(accessToken)).willReturn(true);
+        given(jwtProvider.isAccessTokenValid(accessToken)).willReturn(true);
         given(jwtProvider.extractProvider(accessToken)).willReturn(PROVIDER);
         given(jwtProvider.extractSocialId(accessToken)).willReturn(SOCIAL_ID);
 
@@ -158,7 +158,7 @@ class UserControllerTest {
     @DisplayName("내 관심 지역과 과목을 변경한다.")
     void changeDomain() throws Exception {
         String accessToken = "access-token";
-        given(jwtProvider.isTokenValid(accessToken)).willReturn(true);
+        given(jwtProvider.isAccessTokenValid(accessToken)).willReturn(true);
         given(jwtProvider.extractProvider(accessToken)).willReturn(PROVIDER);
         given(jwtProvider.extractSocialId(accessToken)).willReturn(SOCIAL_ID);
 
@@ -178,7 +178,7 @@ class UserControllerTest {
     @DisplayName("회원 탈퇴 시 Refresh Token을 삭제한다.")
     void deleteUser() throws Exception {
         String accessToken = "access-token";
-        given(jwtProvider.isTokenValid(accessToken)).willReturn(true);
+        given(jwtProvider.isAccessTokenValid(accessToken)).willReturn(true);
         given(jwtProvider.extractProvider(accessToken)).willReturn(PROVIDER);
         given(jwtProvider.extractSocialId(accessToken)).willReturn(SOCIAL_ID);
 

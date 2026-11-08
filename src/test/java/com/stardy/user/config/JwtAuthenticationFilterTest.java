@@ -39,7 +39,7 @@ class JwtAuthenticationFilterTest {
         MockHttpServletResponse response = new MockHttpServletResponse();
         request.addHeader(HttpHeaders.AUTHORIZATION, "Bearer access-token");
 
-        given(jwtProvider.isTokenValid("access-token")).willReturn(true);
+        given(jwtProvider.isAccessTokenValid("access-token")).willReturn(true);
         given(jwtProvider.extractSocialId("access-token")).willReturn("google-sub");
         given(jwtProvider.extractRole("access-token")).willReturn("ROLE_USER");
 
@@ -50,6 +50,23 @@ class JwtAuthenticationFilterTest {
         assertThat(SecurityContextHolder.getContext().getAuthentication().getAuthorities())
                 .extracting("authority")
                 .containsExactly("ROLE_USER");
+        verify(filterChain).doFilter(request, response);
+    }
+
+    @Test
+    @DisplayName("Refresh Token을 Bearer로 전달하면 인증하지 않는다.")
+    void rejectRefreshTokenAsBearer() throws Exception {
+        JwtProvider realJwtProvider = new JwtProvider(
+                "5f7e12f7-a7fa-4cf3-8831-7656034e90d3", 1800000L, 604800000L);
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(realJwtProvider);
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        request.addHeader(HttpHeaders.AUTHORIZATION,
+                "Bearer " + realJwtProvider.createRefreshToken("google-sub", "GOOGLE"));
+
+        filter.doFilter(request, response, filterChain);
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
         verify(filterChain).doFilter(request, response);
     }
 

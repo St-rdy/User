@@ -103,7 +103,7 @@ public class AuthController {
         }
 
         String token = authorization.substring(BEARER_PREFIX.length());
-        if (token.isBlank() || !jwtProvider.isTokenValid(token)) {
+        if (token.isBlank() || !jwtProvider.isAccessTokenValid(token)) {
             throw new BaseException(UNAUTHORIZED);
         }
 

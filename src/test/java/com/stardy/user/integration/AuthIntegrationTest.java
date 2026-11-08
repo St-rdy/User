@@ -13,12 +13,19 @@ import com.stardy.user.repository.RoleRepository;
 import com.stardy.user.repository.UserRepository;
 import com.stardy.user.repository.UserProviderRepository;
 import com.stardy.user.service.AuthService;
+import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -26,12 +33,20 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.request;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
+@AutoConfigureMockMvc
 @Import(TestContainersConfig.class)
 @ActiveProfiles("test")
 @Transactional
 public class AuthIntegrationTest {
+    @Autowired
+    private MockMvc mockMvc;
+
     @Autowired
     private AuthService authService;
     @Autowired
@@ -44,6 +59,29 @@ public class AuthIntegrationTest {
     private RoleRepository roleRepository;
     @Autowired
     private JwtProvider jwtProvider;
+
+    @ParameterizedTest
+    @CsvSource({"GET, /api/v1/users/me", "POST, /api/v1/auth/signup", "POST, /api/v1/auth/logout"})
+    @DisplayName("Refresh Token을 Bearer로 전달한 보호 API 요청은 401을 반환한다.")
+    void rejectRefreshTokenOnProtectedEndpoints(String method, String path) throws Exception {
+        String refreshToken = jwtProvider.createRefreshToken("google-sub", "GOOGLE");
+
+        mockMvc.perform(request(HttpMethod.valueOf(method), path)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + refreshToken))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
+    @DisplayName("Access Token을 재발급 Cookie에 넣으면 401을 반환한다.")
+    void rejectAccessTokenInRefreshCookie() throws Exception {
+        String accessToken = jwtProvider.createAccessToken("google-sub", "GOOGLE", "ROLE_USER");
+
+        mockMvc.perform(post("/api/v1/auth/token/refresh")
+                        .cookie(new Cookie("refreshToken", accessToken)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("INVALID_TOKEN"));
+    }
 
     @Test
     void contextLoads() {
