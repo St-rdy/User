@@ -42,7 +42,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     private void authenticate(String token) {
-        if (token.isBlank() || !jwtProvider.isTokenValid(token)) {
+        if (token.isBlank() || !jwtProvider.isAccessTokenValid(token)) {
             SecurityContextHolder.clearContext();
             return;
         }

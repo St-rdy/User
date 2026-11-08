@@ -29,6 +29,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 /*
 1. RefreshToken으로 AccessToken 재발급 (+ RefreshToken도 재발급)
@@ -70,7 +71,7 @@ class AuthServiceTest {
         String newRefreshToken = "new-refresh-token";
         String role = "ROLE_USER";
 
-        given(jwtProvider.isTokenValid(oldRefreshToken)).willReturn(true);
+        given(jwtProvider.isRefreshTokenValid(oldRefreshToken)).willReturn(true);
         given(jwtProvider.extractSocialId(oldRefreshToken)).willReturn(socialId);
         given(jwtProvider.extractProvider(oldRefreshToken)).willReturn(provider);
         given(userProviderRepository.findByProviderAndSocialId(provider, socialId))
@@ -89,11 +90,26 @@ class AuthServiceTest {
     }
 
     @Test
+    @DisplayName("Access Token으로 재발급하면 저장소 접근 전에 거부한다.")
+    void rejectAccessTokenForReissue() {
+        JwtProvider realJwtProvider = new JwtProvider(
+                "5f7e12f7-a7fa-4cf3-8831-7656034e90d3", 1800000L, 604800000L);
+        AuthService service = new AuthService(realJwtProvider, redisTokenRepository,
+                userProviderRepository, googleOAuth2Service);
+        String accessToken = realJwtProvider.createAccessToken("google-sub", "GOOGLE", "ROLE_USER");
+
+        BaseException exception = assertThrows(BaseException.class, () -> service.reissueToken(accessToken));
+
+        assertBaseException(exception, ErrorCode.INVALID_TOKEN);
+        verifyNoInteractions(userProviderRepository, redisTokenRepository);
+    }
+
+    @Test
     @DisplayName("유효하지 않은 RefreshToken으로 재발급 시 예외를 던진다.")
     void reissueWithInvalidToken() {
         // given
         String invalidToken = "invalid-token";
-        given(jwtProvider.isTokenValid(invalidToken)).willReturn(false);
+        given(jwtProvider.isRefreshTokenValid(invalidToken)).willReturn(false);
 
         // when
         BaseException exception = assertThrows(BaseException.class, () -> authService.reissueToken(invalidToken));
@@ -112,7 +128,7 @@ class AuthServiceTest {
         String newAccessToken = "new-access-token";
         String newRefreshToken = "new-refresh-token";
 
-        given(jwtProvider.isTokenValid(stolenToken)).willReturn(true);
+        given(jwtProvider.isRefreshTokenValid(stolenToken)).willReturn(true);
         given(jwtProvider.extractSocialId(stolenToken)).willReturn(socialId);
         given(jwtProvider.extractProvider(stolenToken)).willReturn(provider);
         given(userProviderRepository.findByProviderAndSocialId(provider, socialId))
@@ -136,7 +152,7 @@ class AuthServiceTest {
         String socialId = "google-sub";
         String provider = "GOOGLE";
 
-        given(jwtProvider.isTokenValid(refreshToken)).willReturn(true);
+        given(jwtProvider.isRefreshTokenValid(refreshToken)).willReturn(true);
         given(jwtProvider.extractSocialId(refreshToken)).willReturn(socialId);
         given(jwtProvider.extractProvider(refreshToken)).willReturn(provider);
         given(userProviderRepository.findByProviderAndSocialId(provider, socialId))
@@ -162,7 +178,7 @@ class AuthServiceTest {
                 "test@gmail.com", "Test User", "ROLE_USER", provider, socialId, "test@gmail.com"
         );
 
-        given(jwtProvider.isTokenValid(refreshToken)).willReturn(true);
+        given(jwtProvider.isRefreshTokenValid(refreshToken)).willReturn(true);
         given(jwtProvider.extractSocialId(refreshToken)).willReturn(socialId);
         given(jwtProvider.extractProvider(refreshToken)).willReturn(provider);
         given(userProviderRepository.findByProviderAndSocialId(provider, socialId)).willReturn(Optional.empty());

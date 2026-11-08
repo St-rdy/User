@@ -1,8 +1,15 @@
 package com.stardy.user.global;
 
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
+
+import java.nio.charset.StandardCharsets;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -15,6 +22,83 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class JwtProviderTest {
     private JwtProvider jwtProvider;
+
+    @Test
+    @DisplayName("발급한 JWT에는 서명된 토큰 용도가 포함된다.")
+    void issuedTokensContainTokenType() {
+        var parser = Jwts.parser()
+                .verifyWith(Keys.hmacShaKeyFor("5f7e12f7-a7fa-4cf3-8831-7656034e90d3".getBytes(StandardCharsets.UTF_8)))
+                .build();
+
+        String accessToken = jwtProvider.createAccessToken("google-sub", "GOOGLE", "ROLE_USER");
+        String refreshToken = jwtProvider.createRefreshToken("google-sub", "GOOGLE");
+
+        assertThat(parser.parseSignedClaims(accessToken).getPayload().get("tokenType", String.class)).isEqualTo("ACCESS");
+        assertThat(parser.parseSignedClaims(refreshToken).getPayload().get("tokenType", String.class)).isEqualTo("REFRESH");
+    }
+
+    @Test
+    @DisplayName("Access Token과 Refresh Token은 각자의 용도로만 검증된다.")
+    void validateTokensOnlyForTheirPurpose() {
+        String accessToken = jwtProvider.createAccessToken("google-sub", "GOOGLE", "ROLE_USER");
+        String refreshToken = jwtProvider.createRefreshToken("google-sub", "GOOGLE");
+
+        assertThat(jwtProvider.isAccessTokenValid(accessToken)).isTrue();
+        assertThat(jwtProvider.isRefreshTokenValid(accessToken)).isFalse();
+        assertThat(jwtProvider.isRefreshTokenValid(refreshToken)).isTrue();
+        assertThat(jwtProvider.isAccessTokenValid(refreshToken)).isFalse();
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = {"", "UNKNOWN", "access", "refresh"})
+    @DisplayName("토큰 용도가 없거나 알 수 없으면 두 용도 모두 거부한다.")
+    void rejectMissingOrUnknownTokenType(String tokenType) {
+        String token = Jwts.builder()
+                .subject("google-sub")
+                .claim("provider", "GOOGLE")
+                .claim("role", "ROLE_USER")
+                .claim("tokenType", tokenType)
+                .signWith(Keys.hmacShaKeyFor("5f7e12f7-a7fa-4cf3-8831-7656034e90d3".getBytes(StandardCharsets.UTF_8)))
+                .compact();
+
+        assertThat(jwtProvider.isTokenValid(token)).isTrue();
+        assertThat(jwtProvider.isAccessTokenValid(token)).isFalse();
+        assertThat(jwtProvider.isRefreshTokenValid(token)).isFalse();
+    }
+
+    @Test
+    @DisplayName("만료된 토큰은 용도가 맞아도 거부한다.")
+    void rejectExpiredTokensForTheirPurpose() {
+        JwtProvider expiredJwtProvider = new JwtProvider(
+                "5f7e12f7-a7fa-4cf3-8831-7656034e90d3", 0L, 0L);
+
+        assertThat(jwtProvider.isAccessTokenValid(
+                expiredJwtProvider.createAccessToken("google-sub", "GOOGLE", "ROLE_USER"))).isFalse();
+        assertThat(jwtProvider.isRefreshTokenValid(
+                expiredJwtProvider.createRefreshToken("google-sub", "GOOGLE"))).isFalse();
+    }
+
+    @Test
+    @DisplayName("다른 키로 서명된 토큰은 용도가 맞아도 거부한다.")
+    void rejectWrongSignatureForBothPurposes() {
+        JwtProvider otherJwtProvider = new JwtProvider(
+                "11111111-1111-1111-1111-111111111111", 1800000L, 604800000L);
+
+        assertThat(jwtProvider.isAccessTokenValid(
+                otherJwtProvider.createAccessToken("google-sub", "GOOGLE", "ROLE_USER"))).isFalse();
+        assertThat(jwtProvider.isRefreshTokenValid(
+                otherJwtProvider.createRefreshToken("google-sub", "GOOGLE"))).isFalse();
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = {"", "invalid.token.value"})
+    @DisplayName("잘못된 입력은 두 용도 모두 거부한다.")
+    void rejectInvalidInputForBothPurposes(String token) {
+        assertThat(jwtProvider.isAccessTokenValid(token)).isFalse();
+        assertThat(jwtProvider.isRefreshTokenValid(token)).isFalse();
+    }
 
     //@Autowired 대신 직접 넣어주는 방식 (트레이드 오프를 감안하여 테스트에서는 다음과 같이 진행)
     @BeforeEach

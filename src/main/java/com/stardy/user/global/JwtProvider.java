@@ -15,6 +15,10 @@ import java.util.UUID;
 @Component
 public class JwtProvider {
 
+    private static final String TOKEN_TYPE_CLAIM = "tokenType";
+    private static final String ACCESS_TOKEN_TYPE = "ACCESS";
+    private static final String REFRESH_TOKEN_TYPE = "REFRESH";
+
     private final SecretKey secretKey;
     private final long accessTokenExpiration;
     private final long refreshTokenExpiration;
@@ -34,6 +38,7 @@ public class JwtProvider {
                 .subject(socialId)
                 .claim("provider", provider)
                 .claim("role", role)
+                .claim(TOKEN_TYPE_CLAIM, ACCESS_TOKEN_TYPE)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + accessTokenExpiration))
                 .signWith(secretKey)
@@ -46,6 +51,7 @@ public class JwtProvider {
                 .subject(socialId)
                 .claim("provider", provider)
                 .id(UUID.randomUUID().toString())
+                .claim(TOKEN_TYPE_CLAIM, REFRESH_TOKEN_TYPE)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + refreshTokenExpiration))
                 .signWith(secretKey)
@@ -67,6 +73,22 @@ public class JwtProvider {
             parseClaims(token);
             return true;
         } catch (JwtException | IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+    public boolean isAccessTokenValid(String token) {
+        return isTokenValid(token, ACCESS_TOKEN_TYPE);
+    }
+
+    public boolean isRefreshTokenValid(String token) {
+        return isTokenValid(token, REFRESH_TOKEN_TYPE);
+    }
+
+    private boolean isTokenValid(String token, String expectedType) {
+        try {
+            return expectedType.equals(parseClaims(token).get(TOKEN_TYPE_CLAIM));
+        } catch (JwtException | IllegalArgumentException exception) {
             return false;
         }
     }
